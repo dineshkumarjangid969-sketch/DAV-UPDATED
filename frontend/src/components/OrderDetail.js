@@ -53,7 +53,7 @@ export default function OrderDetail({ order, onBack }) {
         <div className="flex flex-wrap justify-between items-start gap-4 border-b border-slate-800 pb-5">
           <div>
             <div className="flex items-center gap-2.5">
-              <h2 className="text-2xl font-black tracking-tight text-white">Order {data.order_number || "—"}</h2>
+              <h2 className="text-2xl font-black tracking-tight text-white">Order {data.invoiceNo || "Not identified"}</h2>
               <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider ${
                 data.status === "completed" ? "bg-green-500/10 text-green-400 border border-green-500/20" :
                 data.status === "in_progress" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" :
@@ -63,7 +63,7 @@ export default function OrderDetail({ order, onBack }) {
               </span>
             </div>
             <p className="text-slate-400 text-xs mt-1">
-              {data.invoice_number && `Invoice: ${data.invoice_number}`} 
+              {data.invoiceNo && data.invoiceNo !== "Not identified" && `Invoice: ${data.invoiceNo}`}
               {data.po_number && ` | PO: ${data.po_number}`}
             </p>
           </div>
@@ -85,23 +85,23 @@ export default function OrderDetail({ order, onBack }) {
             <div className="grid grid-cols-2 gap-y-3 text-xs">
               <div>
                 <p className="text-slate-500 uppercase tracking-wider font-semibold text-[10px]">BT Type</p>
-                <p className="text-slate-200 mt-0.5 capitalize">{data.bt_type?.replace(/_/g, " ")}</p>
+                <p className="text-slate-200 mt-0.5 capitalize">{data.bt_type?.replace(/_/g, " ") || "Not identified"}</p>
               </div>
               <div>
-                <p className="text-slate-500 uppercase tracking-wider font-semibold text-[10px]">Billing Party</p>
-                <p className="text-slate-200 mt-0.5">{data.billing_party || "—"}</p>
+                <p className="text-slate-500 uppercase tracking-wider font-semibold text-[10px]">Bill To</p>
+                <p className="text-slate-200 mt-0.5">{data.billTo || "Not identified"}</p>
               </div>
               <div>
                 <p className="text-slate-500 uppercase tracking-wider font-semibold text-[10px]">BT Origin / Store</p>
-                <p className="text-slate-200 mt-0.5">{data.bt_from || data.pickup_store || "—"}</p>
+                <p className="text-slate-200 mt-0.5">{data.comingFrom || "Not identified"}</p>
               </div>
               <div>
                 <p className="text-slate-500 uppercase tracking-wider font-semibold text-[10px]">BT Destination</p>
-                <p className="text-slate-200 mt-0.5">{data.bt_to || data.destination_store || "—"}</p>
+                <p className="text-slate-200 mt-0.5">{data.destination || "Not identified"}</p>
               </div>
               <div className="col-span-2">
                 <p className="text-slate-500 uppercase tracking-wider font-semibold text-[10px]">Delivery Route Location</p>
-                <p className="text-slate-200 mt-0.5 font-medium">{data.location || "—"}</p>
+                <p className="text-slate-200 mt-0.5 font-medium">{data.destination || "Not identified"}</p>
               </div>
             </div>
           </div>
@@ -114,19 +114,19 @@ export default function OrderDetail({ order, onBack }) {
             <div className="grid grid-cols-2 gap-y-3 text-xs">
               <div>
                 <p className="text-slate-500 uppercase tracking-wider font-semibold text-[10px]">Customer Name</p>
-                <p className="text-slate-200 mt-0.5 font-bold">{data.customer_name || "—"}</p>
+                <p className="text-slate-200 mt-0.5 font-bold">{data.customer_name || "Not identified"}</p>
               </div>
               <div>
                 <p className="text-slate-500 uppercase tracking-wider font-semibold text-[10px]">Contact Phone</p>
-                <p className="text-slate-200 mt-0.5 font-medium">{data.customer_phone || "—"}</p>
+                <p className="text-slate-200 mt-0.5 font-medium">{data.customer_phone || "Not identified"}</p>
               </div>
               <div className="col-span-2">
-                <p className="text-slate-500 uppercase tracking-wider font-semibold text-[10px]">Exact Address</p>
-                <p className="text-slate-200 mt-0.5">{data.destination_address || "—"}</p>
+                <p className="text-slate-500 uppercase tracking-wider font-semibold text-[10px]">Exact Address / Destination</p>
+                <p className="text-slate-200 mt-0.5">{data.destination || "Not identified"}</p>
               </div>
               <div>
                 <p className="text-slate-500 uppercase tracking-wider font-semibold text-[10px]">Preferred Delivery Date</p>
-                <p className="text-slate-200 mt-0.5">{data.preferred_delivery_date || "—"}</p>
+                <p className="text-slate-200 mt-0.5">{data.preferred_delivery_date || "Not identified"}</p>
               </div>
               <div className="flex items-center gap-4 col-span-2 mt-1 bg-slate-950/40 p-2 rounded-lg border border-slate-800/60">
                 <span className="flex items-center gap-1">
@@ -175,10 +175,10 @@ export default function OrderDetail({ order, onBack }) {
             <div className="space-y-3 text-xs">
               <div className="grid grid-cols-3 gap-2">
                 <div className="col-span-1 text-slate-500">From:</div>
-                <div className="col-span-2 text-slate-300 font-medium">{data.email_from || "—"}</div>
+                <div className="col-span-2 text-slate-300 font-medium">{data.email_from || "Not identified"}</div>
                 
                 <div className="col-span-1 text-slate-500">Subject:</div>
-                <div className="col-span-2 text-slate-300 font-semibold">{data.email_subject || "—"}</div>
+                <div className="col-span-2 text-slate-300 font-semibold">{data.sourceEmailSubject || "Not identified"}</div>
                 
                 <div className="col-span-1 text-slate-500">Date Received:</div>
                 <div className="col-span-2 text-slate-400">{formatDate(data.email_date)}</div>
@@ -222,10 +222,10 @@ export default function OrderDetail({ order, onBack }) {
         </div>
 
         {/* Product Items Table */}
-        {data.line_items && data.line_items.length > 0 && (
+        {data.products && data.products.length > 0 && (
           <div className="bg-slate-900/30 border border-slate-800/80 rounded-2xl p-5 space-y-4">
             <h3 className="font-bold text-white flex items-center gap-2 text-sm">
-              <Package size={16} className="text-emerald-400" /> Items List ({data.line_items.length})
+              <Package size={16} className="text-emerald-400" /> Items List ({data.products.length})
             </h3>
             <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-950/20">
               <table className="w-full text-xs text-left text-slate-300">
@@ -237,10 +237,10 @@ export default function OrderDetail({ order, onBack }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/40">
-                  {data.line_items.map((item, i) => (
+                  {data.products.map((item, i) => (
                     <tr key={i} className="hover:bg-slate-900/10">
                       <td className="px-4 py-3 font-mono font-bold text-blue-400">{item.sku}</td>
-                      <td className="px-4 py-3 text-slate-300">{item.description || "—"}</td>
+                      <td className="px-4 py-3 text-slate-300">{item.description || "Not identified"}</td>
                       <td className="px-4 py-3 text-right font-semibold text-white font-mono">{item.quantity}</td>
                     </tr>
                   ))}

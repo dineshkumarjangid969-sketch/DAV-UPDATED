@@ -158,7 +158,7 @@ export default function RoutePlanner() {
               <p className="text-slate-500 text-sm py-8 text-center font-medium">No pending orders available for routing.</p>
             ) : (
               <div className="max-h-[350px] overflow-y-auto space-y-2 pr-1 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
-                {orders.map(o => (
+                 {orders.map(o => (
                   <div key={o.id} className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
                     selectedOrders.includes(o.id) 
                       ? "bg-blue-500/10 border-blue-500/50 shadow-md shadow-blue-500/5" 
@@ -167,7 +167,7 @@ export default function RoutePlanner() {
                     <input type="checkbox" checked={selectedOrders.includes(o.id)} readOnly className="rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500 focus:ring-offset-slate-950 pointer-events-none" />
                     <div className="flex-1 text-sm">
                       <div className="flex items-center justify-between">
-                        <span className="font-bold text-slate-250">{o.order_number}</span>
+                        <span className="font-bold text-slate-250">{o.invoiceNo || "Not identified"}</span>
                         <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider border ${
                           o.bt_type === "customer_delivery" ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
                           o.bt_type === "goods_movement" ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
@@ -177,7 +177,7 @@ export default function RoutePlanner() {
                           {o.bt_type?.replace(/_/g, " ")}
                         </span>
                       </div>
-                      <p className="text-slate-400 text-xs mt-1 truncate">{o.location || o.destination_address || o.bt_to || "—"}</p>
+                      <p className="text-slate-400 text-xs mt-1 truncate">{o.destination || "Not identified"}</p>
                     </div>
                   </div>
                 ))}

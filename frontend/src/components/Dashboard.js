@@ -122,12 +122,12 @@ export default function Dashboard({ onSelectOrder }) {
   };
 
   const formatProducts = (items) => {
-    if (!items || !items.length) return "—";
+    if (!items || !items.length) return "Not identified";
     return items.map((i) => `${i.sku} x${i.quantity}`).join(", ");
   };
 
   const formatDate = (d) => {
-    if (!d) return "—";
+    if (!d) return "Not identified";
     try {
       return format(new Date(d), "dd/MM/yyyy HH:mm");
     } catch {
@@ -240,9 +240,9 @@ export default function Dashboard({ onSelectOrder }) {
                 <th className="px-4 py-3 text-left">Email Date</th>
                 <th className="px-4 py-3 text-left">Products</th>
                 <th className="px-4 py-3 text-left">BT Type</th>
-                <th className="px-4 py-3 text-left">BT From</th>
-                <th className="px-4 py-3 text-left">BT To</th>
-                <th className="px-4 py-3 text-left">Billing Party</th>
+                <th className="px-4 py-3 text-left">Coming From</th>
+                <th className="px-4 py-3 text-left">Destination</th>
+                <th className="px-4 py-3 text-left">Bill To</th>
                 <th className="px-4 py-3 text-center">Picked up</th>
                 <th className="px-4 py-3 text-center">Delivered</th>
                 <th className="px-4 py-3 text-center">Billed</th>
@@ -273,16 +273,16 @@ export default function Dashboard({ onSelectOrder }) {
                     onClick={() => onSelectOrder(order)}
                   >
                     <td className="px-4 py-3.5 text-slate-400 font-mono text-xs">
-                      {order.invoice_number || "—"}
+                      {order.invoiceNo || "Not identified"}
                     </td>
-                    <td className="px-4 py-3.5 max-w-[150px] truncate text-slate-300 text-xs" title={order.email_subject}>
-                      {order.email_subject || "—"}
+                    <td className="px-4 py-3.5 max-w-[150px] truncate text-slate-300 text-xs" title={order.sourceEmailSubject}>
+                      {order.sourceEmailSubject || "Not identified"}
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap text-slate-400 text-xs">
                       {formatDate(order.email_date)}
                     </td>
-                    <td className="px-4 py-3.5 max-w-[150px] truncate text-slate-400 text-xs" title={formatProducts(order.line_items)}>
-                      {formatProducts(order.line_items)}
+                    <td className="px-4 py-3.5 max-w-[150px] truncate text-slate-400 text-xs" title={formatProducts(order.products)}>
+                      {formatProducts(order.products)}
                     </td>
                     <td className="px-4 py-3.5">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide border ${
@@ -295,14 +295,14 @@ export default function Dashboard({ onSelectOrder }) {
                         {order.bt_type?.replace(/_/g, " ") || "—"}
                       </span>
                     </td>
-                    <td className="px-4 py-3.5 text-slate-300 text-xs truncate max-w-[100px]" title={order.bt_from}>
-                      {order.bt_from || "—"}
+                    <td className="px-4 py-3.5 text-slate-300 text-xs truncate max-w-[100px]" title={order.comingFrom}>
+                      {order.comingFrom || "Not identified"}
                     </td>
-                    <td className="px-4 py-3.5 text-slate-300 text-xs truncate max-w-[100px]" title={order.bt_to}>
-                      {order.bt_to || "—"}
+                    <td className="px-4 py-3.5 text-slate-300 text-xs truncate max-w-[100px]" title={order.destination}>
+                      {order.destination || "Not identified"}
                     </td>
-                    <td className="px-4 py-3.5 text-slate-300 text-xs truncate max-w-[120px]" title={order.billing_party}>
-                      {order.billing_party || "—"}
+                    <td className="px-4 py-3.5 text-slate-300 text-xs truncate max-w-[120px]" title={order.billTo}>
+                      {order.billTo || "Not identified"}
                     </td>
                     
                     {/* Status Toggles */}
@@ -331,8 +331,8 @@ export default function Dashboard({ onSelectOrder }) {
                     <td className="px-4 py-3.5 font-semibold text-emerald-400 font-mono text-xs">
                       {order.rate ? `$${order.rate.toFixed(2)}` : "—"}
                     </td>
-                    <td className="px-4 py-3.5 max-w-[140px] truncate text-slate-400 text-xs" title={order.location}>
-                      {order.location || "—"}
+                    <td className="px-4 py-3.5 max-w-[140px] truncate text-slate-400 text-xs" title={order.destination}>
+                      {order.destination || "Not identified"}
                     </td>
                     <td className="px-4 py-3.5 text-center flex items-center justify-center gap-1.5">
                       <button 

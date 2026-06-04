@@ -21,11 +21,200 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.get("/uploads/:filename", (req, res, next) => {
+app.get("/uploads/:filename", async (req, res, next) => {
   if (req.params.filename.endsWith(".eml")) {
     const filePath = path.join(__dirname, "uploads", req.params.filename);
-    res.setHeader("Content-Type", "text/plain");
-    return res.sendFile(filePath);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).send("Email file not found");
+    }
+    try {
+      const { simpleParser } = require("mailparser");
+      const emailBuffer = fs.readFileSync(filePath);
+      const parsed = await simpleParser(emailBuffer);
+
+      let attachmentsHtml = "";
+      if (parsed.attachments && parsed.attachments.length > 0) {
+        attachmentsHtml = `
+          <div class="attachments-section">
+            <h4>Attachments (${parsed.attachments.length})</h4>
+            <div class="attachments-list">
+              ${parsed.attachments.map(att => {
+                const sizeKb = (att.size / 1024).toFixed(1);
+                return `
+                  <div class="attachment-item">
+                    <svg class="attachment-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                    <span class="attachment-name">${att.filename || "unnamed"}</span>
+                    <span class="attachment-size">(${sizeKb} KB)</span>
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          </div>
+        `;
+      }
+
+      const formattedDate = parsed.date ? new Date(parsed.date).toLocaleString() : "Unknown Date";
+
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>${parsed.subject || "Email View"}</title>
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+          <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+          <style>
+            :root {
+              --bg-primary: #090d16;
+              --bg-secondary: #111827;
+              --bg-tertiary: #1f2937;
+              --text-primary: #f3f4f6;
+              --text-secondary: #9ca3af;
+              --accent-color: #6366f1;
+              --border-color: #374151;
+            }
+            * {
+              box-sizing: border-box;
+              margin: 0;
+              padding: 0;
+            }
+            body {
+              font-family: 'Plus Jakarta Sans', sans-serif;
+              background-color: var(--bg-primary);
+              color: var(--text-primary);
+              min-height: 100vh;
+              padding: 24px;
+              display: flex;
+              justify-content: center;
+              align-items: flex-start;
+            }
+            .email-container {
+              width: 100%;
+              max-width: 850px;
+              background-color: var(--bg-secondary);
+              border: 1px solid var(--border-color);
+              border-radius: 16px;
+              box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+              overflow: hidden;
+              display: flex;
+              flex-direction: column;
+            }
+            .email-header {
+              padding: 24px;
+              border-bottom: 1px solid var(--border-color);
+              background: linear-gradient(145deg, #111827, #1e1b4b 60%, #111827);
+            }
+            .subject {
+              font-size: 20px;
+              font-weight: 700;
+              color: #ffffff;
+              margin-bottom: 16px;
+              line-height: 1.4;
+            }
+            .meta-grid {
+              display: grid;
+              grid-template-columns: auto 1fr;
+              gap: 8px 16px;
+              font-size: 14px;
+            }
+            .meta-label {
+              font-weight: 600;
+              color: var(--text-secondary);
+              min-width: 60px;
+            }
+            .meta-value {
+              color: var(--text-primary);
+            }
+            .email-body {
+              padding: 32px;
+              background-color: #ffffff;
+              color: #1f2937;
+              font-size: 15px;
+              line-height: 1.6;
+              overflow-x: auto;
+              min-height: 400px;
+            }
+            .plain-text-body {
+              font-family: inherit;
+              white-space: pre-wrap;
+              color: #1f2937;
+            }
+            .attachments-section {
+              padding: 20px 24px;
+              background-color: #1a202c;
+              border-top: 1px solid var(--border-color);
+            }
+            .attachments-section h4 {
+              font-size: 13px;
+              color: var(--text-secondary);
+              margin-bottom: 12px;
+              text-transform: uppercase;
+              letter-spacing: 0.05em;
+            }
+            .attachments-list {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 12px;
+            }
+            .attachment-item {
+              background-color: var(--bg-secondary);
+              border: 1px solid var(--border-color);
+              padding: 10px 16px;
+              border-radius: 8px;
+              font-size: 13px;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              color: var(--text-primary);
+            }
+            .attachment-icon {
+              color: var(--accent-color);
+              flex-shrink: 0;
+            }
+            .attachment-name {
+              font-weight: 500;
+              max-width: 200px;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+            }
+            .attachment-size {
+              color: var(--text-secondary);
+            }
+          </style>
+        </head>
+        <body>
+          <div class="email-container">
+            <div class="email-header">
+              <div class="subject">${parsed.subject || "(No Subject)"}</div>
+              <div class="meta-grid">
+                <div class="meta-label">From:</div>
+                <div class="meta-value">${parsed.from ? parsed.from.text : "Unknown"}</div>
+                
+                <div class="meta-label">To:</div>
+                <div class="meta-value">${parsed.to ? parsed.to.text : "Unknown"}</div>
+                
+                <div class="meta-label">Date:</div>
+                <div class="meta-value">${formattedDate}</div>
+              </div>
+            </div>
+            <div class="email-body">
+              ${parsed.html ? parsed.html : `<pre class="plain-text-body">${parsed.text || ""}</pre>`}
+            </div>
+            ${attachmentsHtml}
+          </div>
+        </body>
+        </html>
+      `;
+      res.setHeader("Content-Type", "text/html");
+      return res.send(htmlContent);
+    } catch (err) {
+      console.error("Error rendering EML file:", err);
+      res.setHeader("Content-Type", "text/plain");
+      return res.sendFile(filePath);
+    }
   }
   next();
 });
@@ -94,6 +283,7 @@ const Order = sequelize.define("Order", {
   email_screenshot_path: DataTypes.STRING(255),
   attachment_paths: { type: DataTypes.JSON, defaultValue: [] },
   raw_email_body: DataTypes.TEXT,
+  normalized_data: { type: DataTypes.JSON, defaultValue: {} },
 }, { tableName: "orders", timestamps: true });
 
 const Driver = sequelize.define("Driver", {
@@ -210,6 +400,41 @@ const STORE_REGISTRY = {
   "Masterton": { lat: -40.9500, lon: 175.6600, region: "Wellington", aliases: ["masterton"] },
   "Mt Roskill": { lat: -36.9100, lon: 174.7300, region: "Auckland", aliases: ["mt roskill", "mount roskill"] },
   "Dargaville": { lat: -35.9300, lon: 173.8700, region: "Northland", aliases: ["dargaville"] },
+  "Timaru": { lat: -44.3984, lon: 171.2524, region: "Canterbury", aliases: ["timaru"] },
+  
+  // The Warehouse stores
+  "The Warehouse Wairau Park": { lat: -36.7800, lon: 174.7500, region: "Auckland", aliases: ["the warehouse wairau park", "warehouse wairau", "tw wairau"] },
+  "The Warehouse Albany": { lat: -36.7200, lon: 174.7000, region: "Auckland", aliases: ["the warehouse albany", "warehouse albany", "tw albany"] },
+  "The Warehouse Westgate": { lat: -36.8100, lon: 174.6100, region: "Auckland", aliases: ["the warehouse westgate", "warehouse westgate", "tw westgate"] },
+  "The Warehouse Manukau": { lat: -36.9800, lon: 174.8600, region: "Auckland", aliases: ["the warehouse manukau", "warehouse manukau", "tw manukau"] },
+  "The Warehouse Hamilton": { lat: -37.7800, lon: 175.2700, region: "Waikato", aliases: ["the warehouse hamilton", "warehouse hamilton", "tw hamilton"] },
+  "The Warehouse Palmerston North": { lat: -40.3500, lon: 175.6000, region: "Manawatu", aliases: ["the warehouse palmerston north", "warehouse palmerston north", "warehouse palmy", "tw palmerston north", "tw palmy"] },
+  "The Warehouse Whanganui": { lat: -39.9300, lon: 175.0400, region: "Manawatu", aliases: ["the warehouse whanganui", "warehouse whanganui", "warehouse wanganui", "tw whanganui", "tw wanganui"] },
+  "The Warehouse Whakatane": { lat: -37.9500, lon: 176.9900, region: "Bay of Plenty", aliases: ["the warehouse whakatane", "warehouse whakatane", "tw whakatane"] },
+  "The Warehouse Whangarei": { lat: -35.7200, lon: 174.3200, region: "Northland", aliases: ["the warehouse whangarei", "warehouse whangarei", "tw whangarei"] },
+  "The Warehouse Hastings": { lat: -39.6300, lon: 176.8300, region: "Hawkes Bay", aliases: ["the warehouse hastings", "warehouse hastings", "tw hastings"] },
+  "The Warehouse Lower Hutt": { lat: -41.2000, lon: 174.9000, region: "Wellington", aliases: ["the warehouse lower hutt", "warehouse lower hutt", "warehouse hutt", "tw lower hutt", "tw hutt"] },
+  "The Warehouse Porirua": { lat: -41.1300, lon: 174.8400, region: "Wellington", aliases: ["the warehouse porirua", "warehouse porirua", "tw porirua"] },
+  "The Warehouse New Plymouth": { lat: -39.0500, lon: 174.0700, region: "Taranaki", aliases: ["the warehouse new plymouth", "warehouse new plymouth", "tw new plymouth"] },
+  "The Warehouse Rotorua": { lat: -38.1400, lon: 176.2500, region: "Bay of Plenty", aliases: ["the warehouse rotorua", "warehouse rotorua", "tw rotorua"] },
+  "The Warehouse Masterton": { lat: -40.9500, lon: 175.6600, region: "Wellington", aliases: ["the warehouse masterton", "warehouse masterton", "tw masterton"] },
+  
+  // Warehouse / distribution locations
+  "13 Ha Crescent, Harvey Norman Warehouse": { lat: -36.9300, lon: 174.9100, region: "Auckland", aliases: ["13 ha crescent", "ha crescent", "harvey norman warehouse", "hn warehouse", "east tamaki warehouse", "tamaki warehouse", "tamaki"] },
+};
+
+const STORE_NUMBER_MAP = {
+  "21": "Wairau Park",
+  "22": "Porirua",
+  "27": "Pukekohe",
+  "28": "Mt Wellington",
+  "30": "Lower Hutt",
+  "34": "Hastings",
+  "36": "New Plymouth",
+  "38": "Palmerston North",
+  "40": "Porirua",
+  "53": "Timaru",
+  "74": "Whakatane"
 };
 
 // ============================================================================
@@ -217,7 +442,37 @@ const STORE_REGISTRY = {
 // ============================================================================
 const DOCLING_URL = process.env.DOCLING_URL || "http://localhost:8000";
 
+const CACHE_FILE = path.join(__dirname, 'docling_cache.json');
+let doclingCache = {};
+if (fs.existsSync(CACHE_FILE)) {
+  try {
+    doclingCache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
+  } catch (err) {
+    console.error("Error reading cache:", err.message);
+  }
+}
+
+function saveCache() {
+  fs.writeFileSync(CACHE_FILE, JSON.stringify(doclingCache, null, 2), 'utf8');
+}
+
 async function parseWithDocling(filePath, filename) {
+  let cacheKey = filename || path.basename(filePath);
+  if (fs.existsSync(filePath)) {
+    try {
+      cacheKey = fs.statSync(filePath).size + "_" + cacheKey;
+    } catch (e) {}
+  }
+  if (doclingCache[cacheKey]) {
+    return doclingCache[cacheKey];
+  }
+
+  const ext = path.extname(filename || "").toLowerCase();
+  const validExts = [".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".tif", ".bmp", ".gif"];
+  if (!validExts.includes(ext)) {
+    return null;
+  }
+
   try {
     const FormData = require("form-data");
     const form = new FormData();
@@ -226,6 +481,8 @@ async function parseWithDocling(filePath, filename) {
       headers: form.getHeaders(),
       timeout: 60000,
     });
+    doclingCache[cacheKey] = response.data;
+    saveCache();
     return response.data;
   } catch (e) {
     console.error("Docling service error:", e.message);
@@ -262,6 +519,919 @@ const JUNK_KEYWORDS = [
   "notice how much", "you still have", "your payment", "before you submit",
   "you've received", "updates to our", "unlock a free", "fares rising"
 ];
+
+// ============================================================================
+// HTML TO TEXT & EXTRACTION UTILITIES
+// ============================================================================
+
+function htmlToText(html) {
+  if (!html) return "";
+  let text = html;
+  text = text.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
+  text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "");
+  text = text.replace(/<br\s*\/?>/gi, "\n");
+  text = text.replace(/<\/p>|<\/div>|<\/tr>|<tr[^>]*>|<p[^>]*>|<div[^>]*>/gi, "\n");
+  text = text.replace(/<[^>]+>/g, "");
+  text = text.replace(/&nbsp;/gi, " ")
+             .replace(/&amp;/gi, "&")
+             .replace(/&lt;/gi, "<")
+             .replace(/&gt;/gi, ">")
+             .replace(/&quot;/gi, '"')
+             .replace(/&#39;/gi, "'");
+  return text;
+}
+
+function matchStore(text) {
+  if (!text) return null;
+  const cleanText = text.toLowerCase().replace(/\s+/g, " ");
+  
+  if (/^(dav\s*transport|btdav|bt\s*transport)/i.test(cleanText) && cleanText.length < 50) {
+    return null;
+  }
+  
+  // 1. Check for Store Numbers near keywords to avoid false positives (e.g. Hwy 30)
+  const storeNumMatch = cleanText.match(/\b(?:whouse|fax|warehouse|branch|store|showroom|showrooms|bedding|furniture|dept|department|sales|office|box|ph|phone|ext)[,\s#\-\.]*(21|22|27|28|30|34|36|38|40|53|74)\b/) ||
+                        cleanText.match(/\b(21|22|27|28|30|34|36|38|40|53|74)[,\s#\-\.]*(?:whouse|fax|warehouse|branch|store|showroom|showrooms|bedding|furniture|dept|department|sales|office)\b/);
+  
+  if (storeNumMatch) {
+    const num = storeNumMatch[1];
+    const mappedStoreName = STORE_NUMBER_MAP[num];
+    if (mappedStoreName) return mappedStoreName;
+  }
+
+  const exactNumMatch = cleanText.trim().match(/^(21|22|27|28|30|34|36|38|40|53|74)$/);
+  if (exactNumMatch) {
+    const mappedStoreName = STORE_NUMBER_MAP[exactNumMatch[1]];
+    if (mappedStoreName) return mappedStoreName;
+  }
+
+  // 2. Check for Store Names in local part of email
+  if (cleanText.includes("@")) {
+    const localPart = cleanText.split("@")[0].replace(/[^a-z0-9]/g, "");
+    for (const [storeName, data] of Object.entries(STORE_REGISTRY)) {
+      const nameClean = storeName.toLowerCase().replace(/\s+/g, "");
+      if (localPart.includes(nameClean)) {
+        return storeName;
+      }
+      if (data.aliases) {
+        for (const alias of data.aliases) {
+          const aliasClean = alias.toLowerCase().replace(/\s+/g, "");
+          if (localPart.includes(aliasClean)) {
+            return storeName;
+          }
+        }
+      }
+    }
+  }
+
+  // 3. Regular name and alias check (prioritize longer matches)
+  const candidates = [];
+  for (const [storeName, data] of Object.entries(STORE_REGISTRY)) {
+    const nameLower = storeName.toLowerCase();
+    const escapedName = nameLower.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const regex = new RegExp(`\\b${escapedName}\\b`, 'i');
+    
+    if (regex.test(cleanText) || cleanText.includes(nameLower)) {
+      candidates.push({ name: storeName, length: nameLower.length });
+    }
+    
+    if (data.aliases) {
+      for (const alias of data.aliases) {
+        const escapedAlias = alias.toLowerCase().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        const aliasRegex = new RegExp(`\\b${escapedAlias}\\b`, 'i');
+        if (aliasRegex.test(cleanText) || cleanText.includes(alias.toLowerCase())) {
+          candidates.push({ name: storeName, length: alias.length });
+        }
+      }
+    }
+  }
+
+  if (candidates.length > 0) {
+    candidates.sort((a, b) => b.length - a.length);
+    return candidates[0].name;
+  }
+  
+  if (cleanText.includes("13 ha crescent") || cleanText.includes("ha crescent") || cleanText.includes("harvey norman warehouse") || cleanText.includes("east tamaki warehouse") || cleanText.includes("tamaki warehouse") || cleanText.includes("tamaki")) {
+    return "13 Ha Crescent, Harvey Norman Warehouse";
+  }
+
+  return null;
+}
+
+function extractStoresFromTo(combinedContent) {
+  const text = combinedContent.toLowerCase().replace(/\s+/g, " ");
+  
+  const storeMap = {};
+  for (const [storeName, data] of Object.entries(STORE_REGISTRY)) {
+    storeMap[storeName.toLowerCase()] = storeName;
+    if (data.aliases) {
+      for (const alias of data.aliases) {
+        storeMap[alias.toLowerCase()] = storeName;
+      }
+    }
+  }
+  
+  const keys = Object.keys(storeMap).sort((a, b) => b.length - a.length);
+  const escapedKeys = keys.map(k => k.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+  const storePatternStr = `(?:${escapedKeys.join('|')})`;
+  
+  // Advanced regex allowing optional descriptors like store, branch, etc.
+  const transitionRegex = new RegExp(`(${storePatternStr})\\s*(?:store|branch|warehouse|whouse|wh|showrooms?)?\\s*(?:to|2|->|\\-|\\/)\\s*(?:the\\s+)?(${storePatternStr})\\s*(?:store|branch|warehouse|whouse|wh|showrooms?)?`, 'i');
+  const match = text.match(transitionRegex);
+  if (match) {
+    const fromStore = storeMap[match[1].trim().toLowerCase()];
+    const toStore = storeMap[match[2].trim().toLowerCase()];
+    if (fromStore && toStore && fromStore !== toStore) {
+      return { fromStore, toStore };
+    }
+  }
+  return null;
+}
+
+function extractStoresFromHeaders(combinedContent) {
+  const lines = combinedContent.split("\n");
+  let fromStore = null;
+  let toStore = null;
+  
+  for (let i = 0; i < lines.length; i++) {
+    // Strip asterisks to match markdown headers cleanly
+    const line = lines[i].replace(/\*/g, "").trim();
+    if (line.toLowerCase().startsWith("from:")) {
+      const candidate = line.substring(5).trim();
+      const matched = matchStore(candidate);
+      if (matched) {
+        fromStore = matched;
+      }
+    } else if (line.toLowerCase().startsWith("to:")) {
+      const candidate = line.substring(3).trim();
+      if (!candidate.includes("davtransport") && !candidate.includes("btdav")) {
+        const matched = matchStore(candidate);
+        if (matched) {
+          toStore = matched;
+        }
+      }
+    }
+  }
+  
+  if (fromStore && toStore && fromStore !== toStore) {
+    return { fromStore, toStore };
+  }
+  return null;
+}
+
+function extractRoute(combinedContent) {
+  // 1. Try store-to-store transition
+  const transition = extractStoresFromTo(combinedContent);
+  if (transition) return transition;
+  
+  // 2. Try From/To header blocks
+  const headersRoute = extractStoresFromHeaders(combinedContent);
+  if (headersRoute) return headersRoute;
+  
+  return null;
+}
+
+function extractInvoiceNo(combinedContent) {
+  // First try high-priority Harvey Norman order formats (e.g. PONZ0220000341874, NZ0220000341874, NZ-022-3831432)
+  const hnPattern = /(?:PONZ|SONZ|NZ|PO|SO|Invoice|Inv|Order|PO#|SO#)[:\s#\-_]*([A-Z0-9]*NZ[\d\-]{5,})/gi;
+  let hnMatch;
+  while ((hnMatch = hnPattern.exec(combinedContent)) !== null) {
+    const val = hnMatch[1].trim();
+    if (val.length >= 5) return val;
+  }
+  
+  const simpleHnPattern = /\b(NZ[\d\-]{5,})\b/gi;
+  let simpleHnMatch;
+  while ((simpleHnMatch = simpleHnPattern.exec(combinedContent)) !== null) {
+    return simpleHnMatch[1].trim();
+  }
+
+  // Regexes with optional middle modifiers (reprint, copy, status, date, no, number)
+  const patterns = [
+    /\b(?:INV|INVOICE|PO|SO|Order|Ref|Transaction)\b(?:\s+(?:reprint|copy|duplicate|original|status|date|no|number|tax|invoice|report|purchase|sales|re-print))*[:\s#\-_]+([A-Z0-9\-_\/]+)/gi
+  ];
+  
+  const blacklist = /^(and|to|for|the|from|with|status|subject|date|page|image|attached|please|ready|collect|collecting|accepted|pending|scan|scanned|attached|find|re|reprint|re-print|copy|duplicate|original|invoice|order|draft|statement|report|pos|paid|unpaid|cancelled|yes|no|nil|null|none|details|transaction|type|cash|sale|assistant|operator|location|phone|receipt)$/i;
+
+  for (const pat of patterns) {
+    let match;
+    pat.lastIndex = 0;
+    while ((match = pat.exec(combinedContent)) !== null) {
+      const val = match[1].trim();
+      if (val.length >= 3 && !blacklist.test(val) && !val.includes("@") && !/dav/i.test(val)) {
+        return val;
+      }
+    }
+  }
+  
+  // Try pattern for other invoice numbers (like 7 digit numbers or similar)
+  const numericInvoice = combinedContent.match(/\b(2\d{6})\b/);
+  if (numericInvoice) {
+    return numericInvoice[1];
+  }
+  
+  return "Not identified";
+}
+
+function extractComingFrom(combinedContent) {
+  // 1. Try route extraction
+  const route = extractRoute(combinedContent);
+  if (route) return route.fromStore;
+  
+  // 2. Try explicit pickup patterns
+  const pickup = extractPickupLocation(combinedContent);
+  if (pickup) return pickup;
+
+  // 3. Try Supplier/Store/Branch patterns
+  const supplierMatch = combinedContent.match(/(?:Supplier\s+Name|Supplier|Store|Branch|From)[:\s]+([A-Za-z0-9\s,\.\-]+)/i);
+  if (supplierMatch && supplierMatch[1]) {
+    const matched = matchStore(supplierMatch[1]);
+    if (matched) return matched;
+  }
+  
+  // 4. Try matching domain or sender details from headers
+  const fromMatch = combinedContent.match(/From:\s*([^\n]+)/i);
+  if (fromMatch) {
+    const matched = matchStore(fromMatch[1]);
+    if (matched) return matched;
+    
+    const emailMatch = fromMatch[1].match(/@([a-zA-Z0-9\-\.]+)/);
+    if (emailMatch && emailMatch[1]) {
+      const domain = emailMatch[1].toLowerCase();
+      const matchedDomain = matchStore(domain);
+      if (matchedDomain) return matchedDomain;
+    }
+  }
+  
+  return "Not identified";
+}
+
+function extractPickupLocation(text) {
+  if (!text) return null;
+  const patterns = [
+    /(?:Pickup\s+From|Collection\s+From|Transfer\s+From|BT\s+From|Origin)[:\s]+([A-Za-z0-9\s,\.\(\)\-\#]+)/i,
+    /(?:Supplier\s+Name|Supplier)[:\s]+([A-Za-z0-9\s,\.\(\)\-\#]+)/i
+  ];
+  for (const pat of patterns) {
+    const match = text.match(pat);
+    if (match && match[1]) {
+      const candidate = match[1].trim();
+      const matched = matchStore(candidate);
+      if (matched) return matched;
+    }
+  }
+  return null;
+}
+
+function extractDestination(combinedContent) {
+  // 1. Try route extraction
+  const route = extractRoute(combinedContent);
+  if (route) return route.toStore;
+  
+  // 2. Try explicit destination patterns
+  const patterns = [
+    /(?:Deliver\s+To|Delivery\s+To|Delivery\s+Address|BT\s+To|To|Destination|Ship\s+To|Customer\s+Address)[:\s]+([A-Za-z0-9\s,\.\(\)\-\#\/]{3,})/i,
+    /To\s*:\s*([A-Za-z0-9\s,\.\(\)\-\#\/]{3,})/i,
+    /Deliver\s+To\s*[:\s]*([A-Za-z0-9\s,\.\(\)\-\#\/]{3,})/i
+  ];
+
+  for (const pat of patterns) {
+    const match = combinedContent.match(pat);
+    if (match && match[1]) {
+      const candidate = match[1].trim();
+      const cleanCandidate = candidate.split("\n")[0].trim();
+      
+      // Skip transport headers/recipients
+      if (cleanCandidate.includes("@") || /dav\s*transport|btdav/i.test(cleanCandidate)) {
+        continue;
+      }
+      
+      const matchedStore = matchStore(cleanCandidate);
+      if (matchedStore) return matchedStore;
+      if (cleanCandidate.length >= 8) {
+        return cleanCandidate;
+      }
+    }
+  }
+
+  // 3. Fallback: match any store in combined content that is not the origin store
+  const origin = extractComingFrom(combinedContent);
+  const textWithoutOrigin = origin !== "Not identified" ? combinedContent.replace(new RegExp(origin, "gi"), "") : combinedContent;
+  const matchedStore = matchStore(textWithoutOrigin);
+  if (matchedStore) return matchedStore;
+
+  return "Not identified";
+}
+
+function formatDoclingTables(rawTables) {
+  if (!rawTables || !Array.isArray(rawTables)) return "";
+  let out = "";
+  for (const table of rawTables) {
+    if (!Array.isArray(table)) continue;
+    for (const row of table) {
+      if (!Array.isArray(row)) continue;
+      out += row.join(" | ") + "\n";
+    }
+    out += "\n";
+  }
+  return out;
+}
+
+function extractProducts(body, rawTables, rawMarkdown, doclingLineItems) {
+  const products = [];
+  const seenDescs = new Set();
+  
+  function addProduct(sku, quantity, description) {
+    if (!description && !sku) return;
+    description = (description || sku || "").trim();
+    sku = (sku || "").trim();
+    if (description.length < 3 && sku.length < 3) return;
+    // Skip noise items
+    if (/^(sku|code|item|description|details|total|subtotal|gst|tax|payment|signature|warranty|disclaimer|end of report)$/i.test(description)) return;
+    
+    const key = description.toLowerCase().replace(/\s+/g, ' ');
+    if (seenDescs.has(key)) return;
+    seenDescs.add(key);
+    
+    if (isNaN(quantity) || quantity <= 0) quantity = 1;
+    if (!sku || sku === "ITEM") sku = description.split(/\s+/).slice(0, 2).join("-").toUpperCase().replace(/[^A-Z0-9\-]/g, "").substring(0, 20) || "ITEM";
+    
+    products.push({ sku, quantity: parseInt(quantity, 10) || 1, description });
+  }
+  
+  // ─── Strategy 0: Accept Docling's own line_items if present ───
+  if (doclingLineItems && Array.isArray(doclingLineItems) && doclingLineItems.length > 0) {
+    for (const item of doclingLineItems) {
+      addProduct(item.sku || item.product_code || "", item.quantity || 1, item.description || item.name || "");
+    }
+  }
+  
+  // ─── Strategy 1: Table-based extraction ───
+  if (rawTables && Array.isArray(rawTables)) {
+    for (const table of rawTables) {
+      if (!table || table.length < 2) continue;
+      const headers = table[0].map(h => String(h || "").toLowerCase());
+      const skuKeywords = ["sku", "code", "item", "product code", "item code", "model", "product"];
+      const descKeywords = ["description", "product", "item name", "details", "desc", "name"];
+      const qtyKeywords = ["qty", "quantity", "qnty", "qtr", "count"];
+      const skuIdx = headers.findIndex(h => skuKeywords.some(k => h.includes(k)));
+      const descIdx = headers.findIndex(h => descKeywords.some(k => h.includes(k)));
+      const qtyIdx = headers.findIndex(h => qtyKeywords.some(k => h.includes(k)));
+      if (skuIdx >= 0 || descIdx >= 0) {
+        for (let r = 1; r < table.length; r++) {
+          const row = table[r];
+          if (!row || row.length < 2) continue;
+          let sku = skuIdx >= 0 && skuIdx < row.length ? String(row[skuIdx] || "").trim().replace(/^\*?\s*/, "") : "";
+          let desc = descIdx >= 0 && descIdx < row.length ? String(row[descIdx] || "").trim() : "";
+          let qtyStr = qtyIdx >= 0 && qtyIdx < row.length ? String(row[qtyIdx] || "").trim() : "1";
+          addProduct(sku, parseInt(qtyStr.replace(/[^\d]/g, ""), 10), desc || sku);
+        }
+      }
+    }
+  }
+  
+  if (products.length > 0) return products;
+  
+  // ─── Strategy 2: Harvey Norman Invoice heading format ───
+  // Pattern: ## PRODUCT NAME\nQuantity: N\nPrice: $X\nProduct Code: * XXXXX
+  const markdownText = rawMarkdown || "";
+  const allText = markdownText + "\n" + (body || "");
+  const allLines = allText.split("\n");
+  
+  for (let i = 0; i < allLines.length; i++) {
+    const line = allLines[i].trim();
+    
+    // Match markdown heading product names: ## HARRINGTON SOFT QUN MAT
+    const headingMatch = line.match(/^#{1,3}\s+([A-Z][A-Z0-9\s\/\-\(\)\.,']+)$/);
+    if (headingMatch) {
+      const desc = headingMatch[1].trim();
+      // Skip non-product headings
+      if (/^(TAX\s*INVOICE|INVOICE|F2F|TAPE|Warranty|Other|Invoice\s*Notes|Delivery\s*Address)/i.test(desc)) continue;
+      if (desc.length < 5) continue;
+      
+      // Look ahead for Quantity, Price, Product Code
+      let qty = 1;
+      let sku = "";
+      for (let j = i + 1; j < Math.min(i + 10, allLines.length); j++) {
+        const nextLine = allLines[j].trim();
+        if (nextLine.startsWith("##")) break; // Next product section
+        
+        const qtyMatch = nextLine.match(/Quantity:\s*(\d+)/i);
+        if (qtyMatch) qty = parseInt(qtyMatch[1], 10);
+        
+        const codeMatch = nextLine.match(/Product\s*Code:\s*\*?\s*(\S+)/i);
+        if (codeMatch) sku = codeMatch[1];
+        
+        const deptMatch = nextLine.match(/Dept\.?\s*Code:\s*(\S+)/i);
+        if (deptMatch && !sku) sku = deptMatch[1];
+      }
+      
+      addProduct(sku, qty, desc);
+    }
+  }
+  
+  if (products.length > 0) return products;
+  
+  // ─── Strategy 3: P/O Response format ───
+  // Pattern: PRODUCT NAME    Accepted [SKU]\n[optional SKU line]\nORD: N @ price
+  for (let i = 0; i < allLines.length; i++) {
+    const line = allLines[i].trim();
+    
+    // Match: "GIANNI PU DIN CHAIR             Accepted" or "PRODUCT NAME    Accepted SKU-123"
+    const poMatch = line.match(/^([A-Z][A-Z0-9\s\/\-\(\)\.,']+?)\s{2,}(Accepted|Rejected|Pending)/i);
+    if (poMatch) {
+      let desc = poMatch[1].trim();
+      if (desc.length < 4) continue;
+      
+      // Extract SKU after "Accepted" if present
+      let sku = "";
+      const afterStatus = line.substring(line.indexOf(poMatch[2]) + poMatch[2].length).trim();
+      if (afterStatus && /^[A-Z0-9\-\/]+$/i.test(afterStatus)) sku = afterStatus;
+      
+      // Look ahead for SKU on next line and ORD quantity
+      let qty = 1;
+      for (let j = i + 1; j < Math.min(i + 5, allLines.length); j++) {
+        const nextLine = allLines[j].trim();
+        
+        // SKU on its own line (e.g., "6001" or "VOD-RYDE-03")
+        if (!sku && /^[A-Z0-9\-\/]{3,}$/i.test(nextLine)) {
+          sku = nextLine;
+          continue;
+        }
+        
+        // ORD: 6 @ 160.00
+        const ordMatch = nextLine.match(/ORD:\s*(\d+)\s*@/i);
+        if (ordMatch) {
+          qty = parseInt(ordMatch[1], 10);
+          break;
+        }
+      }
+      
+      addProduct(sku, qty, desc);
+    }
+  }
+  
+  if (products.length > 0) return products;
+  
+  // ─── Strategy 4: F2F Sale / Stock Transfer format ───
+  // Pattern: F2F Sale Details followed by product name and Quantity lines
+  const f2fBlock = allText.match(/F2F\s+Sale\s+Details[\s\S]*?(?=##\s|Invoice\s+Notes|$)/i);
+  if (f2fBlock) {
+    const f2fLines = f2fBlock[0].split("\n");
+    for (let i = 0; i < f2fLines.length; i++) {
+      const line = f2fLines[i].trim();
+      // After F2F Sale Details, look for all-caps product name on its own line
+      if (/^[A-Z][A-Z0-9\s\/\-\.,']{4,}$/.test(line) && !/^(PO\s*Number|Requested\s*By|Customer\s*Name|Delivery|Payment|Store)/i.test(line)) {
+        let qty = 1;
+        let sku = "";
+        for (let j = i + 1; j < Math.min(i + 6, f2fLines.length); j++) {
+          const nl = f2fLines[j].trim();
+          const qm = nl.match(/Quantity:\s*(\d+)/i);
+          if (qm) qty = parseInt(qm[1], 10);
+          const cm = nl.match(/Product\s*Code:\s*\*?\s*(\S+)/i);
+          if (cm) sku = cm[1];
+        }
+        addProduct(sku, qty, line);
+      }
+    }
+  }
+  
+  if (products.length > 0) return products;
+  
+  // ─── Strategy 5: Generic line patterns ───
+  // SKU QTY DESCRIPTION or DESCRIPTION QTY
+  for (let i = 0; i < allLines.length; i++) {
+    const line = allLines[i].trim();
+    
+    // Pattern: SKU  QTY  DESCRIPTION (e.g., "ABC-123  2  Leather Sofa")
+    const m1 = line.match(/^[\*\-]?\s*([A-Z0-9\-\/]{3,})\s+(\d+)\s+(.{3,})/i);
+    if (m1) {
+      addProduct(m1[1].trim(), parseInt(m1[2], 10), m1[3].trim());
+      continue;
+    }
+    
+    // Pattern: Quantity: N for DESCRIPTION or N x DESCRIPTION
+    const m2 = line.match(/(\d+)\s*(?:x|pcs|units|pieces)\s+(.{4,})/i);
+    if (m2 && parseInt(m2[1], 10) <= 200) {
+      addProduct("", parseInt(m2[1], 10), m2[2].trim());
+    }
+  }
+  
+  if (products.length > 0) return products;
+  
+  // ─── Strategy 6: Quantity/Product keyword pairs ───
+  const altMatches = allText.matchAll(/(?:qty|quantity)[:\s]*(\d+)\s*(?:product|description|item)?[:\s]*([a-zA-Z0-9\s\"\-\'\/\.]+)/gi);
+  for (const match of altMatches) {
+    addProduct("", parseInt(match[1], 10), match[2].trim());
+  }
+  
+  if (products.length > 0) return products;
+  
+  // ─── Strategy 7: Natural language product mentions from email body ───
+  const bodyText = (body || "").toLowerCase();
+  
+  // "GM attached for sold PRODUCT" pattern
+  const gmMatch = (body || "").match(/(?:GM|goods?\s*movement)\s+(?:attached\s+)?(?:for\s+)?(?:sold\s+)?([A-Z][A-Za-z0-9\s\/\-\(\)\.,']+?)(?:\.|,|\s+Customer|\s+Please|\s+from|\n)/i);
+  if (gmMatch) {
+    const desc = gmMatch[1].trim();
+    if (desc.length >= 5 && !/^(hi|hello|dear|team|attached|please)/i.test(desc)) {
+      addProduct("", 1, desc);
+    }
+  }
+  
+  // "BT for PRODUCT from Store" pattern
+  const btMatch = (body || "").match(/(?:BT|branch\s+transfer)\s+(?:for\s+)?(\d+\s+)?([A-Za-z][A-Za-z0-9\s\/\-\(\)\.,']+?)(?:\s+from\s+|\s+to\s+|\s+on\s+|\s+please|\.\s|\n)/i);
+  if (btMatch && !products.length) {
+    let qty = btMatch[1] ? parseInt(btMatch[1], 10) : 1;
+    const desc = btMatch[2].trim();
+    // Avoid matching store names as products
+    if (desc.length >= 5 && !/^(hi|hello|dear|team|attached|please|this|asap)/i.test(desc)) {
+      const storeNames = ["wairau", "albany", "westgate", "lower hutt", "palmerston", "hamilton", "whanganui",
+        "whakatane", "whangarei", "hastings", "mt wellington", "manukau", "porirua", "new plymouth",
+        "tauranga", "rotorua", "timaru", "nelson", "christchurch", "dunedin", "invercargill",
+        "napier", "gisborne", "botany", "moorhouse"];
+      const isStore = storeNames.some(s => desc.toLowerCase().includes(s));
+      if (!isStore) {
+        addProduct("", qty, desc);
+      }
+    }
+  }
+  
+  // "collect/organise/arrange PRODUCT" pattern
+  const collectMatch = (body || "").match(/(?:collect|organise|arrange|pickup|pick\s*up)\s+(?:the\s+)?(?:following\s+)?(?:item[s]?\s+)?(\d+\s+)?([A-Za-z][A-Za-z0-9\s\/\-\(\)\.,']+?)(?:\s+from\s+|\s+to\s+|\s+for\s+|\.\s|\n|$)/i);
+  if (collectMatch && !products.length) {
+    let qty = collectMatch[1] ? parseInt(collectMatch[1], 10) : 1;
+    const desc = collectMatch[2].trim();
+    if (desc.length >= 5 && !/^(attached|bt|stock|paperwork|goods|the\s)/i.test(desc)) {
+      const storeNames = ["wairau", "albany", "westgate", "lower hutt", "palmerston", "hamilton", "whanganui",
+        "whakatane", "whangarei", "hastings", "mt wellington", "manukau", "porirua", "new plymouth",
+        "tauranga", "rotorua", "timaru", "nelson", "christchurch", "dunedin", "invercargill"];
+      const isStore = storeNames.some(s => desc.toLowerCase().includes(s));
+      if (!isStore) {
+        addProduct("", qty, desc);
+      }
+    }
+  }
+
+  return products;
+}
+
+function extractBillTo(combinedContent, destination) {
+  const patterns = [
+    /(?:Bill\s+To|Billing\s+Party|Invoice\s+To|Billed\s+To)[:\s]+([A-Za-z0-9\s,\.\(\)\-\#]+)/i,
+    /Bill\s*To\s*:\s*([A-Za-z0-9\s,\.\(\)\-\#]+)/i
+  ];
+  
+  for (const pat of patterns) {
+    const match = combinedContent.match(pat);
+    if (match && match[1]) {
+      const candidate = match[1].trim().split("\n")[0].trim();
+      if (candidate.length >= 3 && !/dav\s*transport|btdav/i.test(candidate)) return candidate;
+    }
+  }
+  
+  return destination || "Not identified";
+}
+
+function extractDeliveryStart(combinedContent) {
+  const patterns = [
+    /(?:Pickup\s+Address|Collection\s+Address|Origin\s+Address|Collect\s+From)[:\s]+([A-Za-z0-9\s,\.\(\)\-\#]+)/i
+  ];
+  
+  for (const pat of patterns) {
+    const match = combinedContent.match(pat);
+    if (match && match[1]) {
+      const candidate = match[1].trim().split("\n")[0].trim();
+      if (candidate.length >= 8 && !/dav\s*transport|btdav/i.test(candidate)) return candidate;
+    }
+  }
+  
+  return "13 Ha Crescent, Harvey Norman Warehouse";
+}
+
+function extractStoreFromOrderNumber(text) {
+  if (!text) return null;
+  const orderNumRegex = /(?:NZ|PONZ|SONZ|PO|SO)?[-_#\s\/]*(0\d{2}|\d{2,3})[-\d\/]{5,}/i;
+  const match = text.match(orderNumRegex);
+  if (match) {
+    const num = parseInt(match[1], 10).toString();
+    const storeName = STORE_NUMBER_MAP[num];
+    if (storeName) return storeName;
+  }
+  return null;
+}
+
+function findAllStoresInText(text) {
+  if (!text) return [];
+  const cleanText = text.toLowerCase();
+  const foundStores = new Set();
+  
+  for (const [storeName, data] of Object.entries(STORE_REGISTRY)) {
+    const nameLower = storeName.toLowerCase();
+    if (cleanText.includes(nameLower)) {
+      foundStores.add(storeName);
+    }
+    if (data.aliases) {
+      for (const alias of data.aliases) {
+        if (alias.length <= 3) continue;
+        if (cleanText.includes(alias.toLowerCase())) {
+          foundStores.add(storeName);
+        }
+      }
+    }
+  }
+
+  const storeNumPattern = /\b(?:21|22|27|28|30|34|36|38|40|53|74)\b/g;
+  let match;
+  while ((match = storeNumPattern.exec(cleanText)) !== null) {
+    const num = match[0];
+    const idx = match.index;
+    const surrounding = cleanText.substring(Math.max(0, idx - 15), Math.min(cleanText.length, idx + 15));
+    if (/(?:whouse|fax|warehouse|branch|store|showroom|showrooms|bedding|furniture|dept|department|sales|office|box|ph|phone|ext)/i.test(surrounding)) {
+      const mapped = STORE_NUMBER_MAP[num];
+      if (mapped) foundStores.add(mapped);
+    }
+  }
+
+  return Array.from(foundStores);
+}
+
+function extractRouteFromContent(subject, fromAddress, bodyText, attachmentsText) {
+  let comingFrom = null;
+  let destination = null;
+
+  const combinedText = [
+    `Subject: ${subject || ""}`,
+    `From Address: ${fromAddress || ""}`,
+    `Body: ${bodyText || ""}`,
+    `Attachments: ${attachmentsText || ""}`
+  ].join("\n");
+  
+  const cleanCombinedText = combinedText.toLowerCase().replace(/\s+/g, " ");
+  
+  // 1. Try explicit routing transitions like StoreA to StoreB
+  const storeMap = {};
+  for (const [storeName, data] of Object.entries(STORE_REGISTRY)) {
+    storeMap[storeName.toLowerCase()] = storeName;
+    if (data.aliases) {
+      for (const alias of data.aliases) {
+        storeMap[alias.toLowerCase()] = storeName;
+      }
+    }
+  }
+  const keys = Object.keys(storeMap).sort((a, b) => b.length - a.length);
+  const escapedKeys = keys.map(k => k.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+  const storePatternStr = `(?:${escapedKeys.join('|')})`;
+  
+  const prefixPattern = '(?:hn\\s+|harvey\\s+norman\\s+|tw\\s+|the\\s+warehouse\\s+)?';
+  const transitionRegex = new RegExp(`(?:${prefixPattern})(${storePatternStr})\\s*(?:store|branch|warehouse|whouse|wh|showrooms?)?\\s*(?:to|2|->|\\-|\\/)\\s*(?:the\\s+)?(?:${prefixPattern})(${storePatternStr})`, 'i');
+  
+  const matchTransition = cleanCombinedText.match(transitionRegex);
+  if (matchTransition) {
+    comingFrom = storeMap[matchTransition[1].trim()];
+    destination = storeMap[matchTransition[2].trim()];
+  }
+
+  // 1.5 Try explicit layout patterns
+  if (!comingFrom) {
+    const pickupMatch = combinedText.match(/(?:Pickup\s+From|Collection\s+From|Transfer\s+From|BT\s+From|Origin|Supplier)[:\s]+([A-Za-z0-9\s,\.\-\(\)\#]+)/i);
+    if (pickupMatch) {
+      const store = matchStore(pickupMatch[1]);
+      if (store && store !== "13 Ha Crescent, Harvey Norman Warehouse") {
+        comingFrom = store;
+      }
+    }
+  }
+
+  if (!destination) {
+    const deliverMatch = combinedText.match(/(?:Deliver\s+To|Delivery\s+To|Delivery\s+Address|Shipping\s+Address|BT\s+To|Destination|Ship\s+To|Customer\s+Address)[:\s]+([A-Za-z0-9\s,\.\-\(\)\#\/]+)/i);
+    if (deliverMatch) {
+      const store = matchStore(deliverMatch[1]);
+      if (store) {
+        destination = store;
+      }
+    }
+  }
+
+  // 2. Try subject directional indicators
+  const cleanSubject = (subject || "").toLowerCase().replace(/\s+/g, " ");
+  if (!comingFrom) {
+    const fromMatch = cleanSubject.match(new RegExp(`(?:bt|transfer)\\s+from\\s+(${storePatternStr})`, 'i'));
+    if (fromMatch) {
+      comingFrom = storeMap[fromMatch[1].trim()];
+    }
+  }
+  if (!destination) {
+    const toMatch = cleanSubject.match(new RegExp(`(?:bt|transfer)\\s+to\\s+(${storePatternStr})`, 'i'));
+    if (toMatch) {
+      destination = storeMap[toMatch[1].trim()];
+    }
+  }
+
+  // 3. Try to identify the Requester Store
+  let requesterStore = null;
+  const lines = (bodyText || "").split('\n');
+  for (const line of lines) {
+    const cleanLine = line.replace(/\*/g, "").trim();
+    if (cleanLine.toLowerCase().startsWith("from:")) {
+      const candidate = cleanLine.substring(5).trim();
+      const store = matchStore(candidate);
+      if (store && store !== "13 Ha Crescent, Harvey Norman Warehouse") {
+        requesterStore = store;
+        break;
+      }
+    }
+  }
+  
+  if (!requesterStore) {
+    requesterStore = matchStore(fromAddress);
+  }
+
+  // 3.5 Identify email recipient store
+  let emailRecipientStore = null;
+  for (const line of lines) {
+    const cleanLine = line.replace(/\*/g, "").trim();
+    if (cleanLine.toLowerCase().startsWith("to:")) {
+      const candidate = cleanLine.substring(3).trim();
+      const store = matchStore(candidate);
+      if (store && store !== "13 Ha Crescent, Harvey Norman Warehouse") {
+        emailRecipientStore = store;
+        break;
+      }
+    }
+  }
+
+  if (emailRecipientStore && emailRecipientStore !== requesterStore) {
+    if (!destination) {
+      destination = emailRecipientStore;
+    }
+  }
+
+  // 4. Try to identify any Other Store
+  let otherStore = null;
+  for (const storeName of Object.keys(STORE_REGISTRY)) {
+    if (storeName === "13 Ha Crescent, Harvey Norman Warehouse") continue;
+    const cleanName = storeName.toLowerCase();
+    const data = STORE_REGISTRY[storeName];
+    
+    let found = cleanCombinedText.includes(cleanName);
+    if (!found && data.aliases) {
+      for (const alias of data.aliases) {
+        if (cleanCombinedText.includes(alias.toLowerCase())) {
+          found = true;
+          break;
+        }
+      }
+    }
+    
+    if (found && storeName !== requesterStore) {
+      otherStore = storeName;
+      break;
+    }
+  }
+
+  // 5. Apply the Requester-Other store rule
+  if (requesterStore && otherStore) {
+    if (!comingFrom) comingFrom = otherStore;
+    if (!destination) destination = requesterStore;
+  }
+
+  // 6. Try order/PO number store prefix matching
+  if (!comingFrom || !destination) {
+    const orderStore = extractStoreFromOrderNumber(combinedText);
+    if (orderStore) {
+      if (!comingFrom && destination && orderStore !== destination) {
+        comingFrom = orderStore;
+      } else if (!destination && comingFrom && orderStore !== comingFrom) {
+        destination = orderStore;
+      } else if (!comingFrom && !destination) {
+        comingFrom = orderStore;
+      }
+    }
+  }
+
+  // 7. Single-store mention / Return to store rule
+  if ((!comingFrom || comingFrom === "Not identified") && (!destination || destination === "Not identified")) {
+    const allFound = findAllStoresInText(combinedText);
+    const uniqueStore = allFound.length === 1 ? allFound[0] : (requesterStore || null);
+    
+    if (uniqueStore && uniqueStore !== "13 Ha Crescent, Harvey Norman Warehouse") {
+      const isReturn = /return\s+to\s+store|rts\b/i.test(cleanCombinedText);
+      if (isReturn) {
+        comingFrom = "Not identified";
+        destination = uniqueStore;
+      } else {
+        comingFrom = uniqueStore;
+        destination = "Not identified";
+      }
+    }
+  }
+  
+  // 8. Zero-Distance Loop Check
+  if (comingFrom && destination && comingFrom !== "Not identified" && destination !== "Not identified" && comingFrom === destination) {
+    const isReturn = /return\s+to\s+store|rts\b/i.test(cleanCombinedText);
+    if (isReturn) {
+      comingFrom = "Not identified";
+    } else {
+      destination = "Not identified";
+    }
+  }
+  
+  return {
+    comingFrom: comingFrom || "Not identified",
+    destination: destination || "Not identified"
+  };
+}
+
+function normalizeOrderExtraction(subject, from, body, html, doclings) {
+  const emailBodyText = (body || "") + "\n" + htmlToText(html);
+  
+  let attachmentsText = "";
+  let rawTables = [];
+  let doclingLineItems = [];
+  if (doclings && Array.isArray(doclings)) {
+    for (const doc of doclings) {
+      if (doc.raw_markdown) {
+        attachmentsText += doc.raw_markdown + "\n";
+      }
+      if (doc.raw_tables) {
+        rawTables = rawTables.concat(doc.raw_tables);
+      }
+      // Collect line_items from Docling's own extraction
+      if (doc.line_items && Array.isArray(doc.line_items) && doc.line_items.length > 0) {
+        doclingLineItems = doclingLineItems.concat(doc.line_items);
+      }
+    }
+  }
+  
+  // Combine all content as per User Request 7
+  const combinedContent = [
+    `Subject: ${subject || ""}`,
+    `From: ${from || ""}`,
+    `Body: ${body || ""}`,
+    `HTML: ${htmlToText(html)}`,
+    `Attachments Text: ${attachmentsText}`,
+    `Attachments Tables: ${formatDoclingTables(rawTables)}`
+  ].join("\n");
+  
+  const invoiceNo = extractInvoiceNo(combinedContent);
+  const route = extractRouteFromContent(subject, from, emailBodyText, attachmentsText);
+  const comingFrom = route.comingFrom;
+  const destination = route.destination;
+  const products = extractProducts(emailBodyText, rawTables, attachmentsText, doclingLineItems);
+  const billTo = extractBillTo(combinedContent, destination);
+  const deliveryStart = extractDeliveryStart(combinedContent);
+  const deliveryStops = destination && destination !== "Not identified" ? [destination] : [];
+  
+  const normalized = {
+    invoiceNo,
+    comingFrom,
+    destination,
+    products,
+    billTo,
+    deliveryStart,
+    deliveryStops,
+    sourceEmailSubject: subject || "Not identified",
+    sourceEmailBody: body || "Not identified",
+    sourceAttachments: doclings ? doclings.map(d => d.filename || "Attachment") : []
+  };
+  
+  return normalized;
+}
+
+function getNormalizedOrder(order) {
+  if (!order) return null;
+  const json = typeof order.toJSON === "function" ? order.toJSON() : order;
+  
+  let normalized = json.normalized_data || {};
+  
+  const invoiceNo = normalized.invoiceNo || json.invoice_number || json.order_number || "Not identified";
+  const comingFrom = normalized.comingFrom || json.bt_from || json.pickup_store || "Not identified";
+  const destination = normalized.destination || json.bt_to || json.destination_store || json.destination_address || json.location || "Not identified";
+  const products = normalized.products || json.line_items || [];
+  const billTo = normalized.billTo || json.billing_party || (destination !== "Not identified" ? destination : "Not identified");
+  const deliveryStart = normalized.deliveryStart || "13 Ha Crescent, Harvey Norman Warehouse";
+  const deliveryStops = normalized.deliveryStops || (destination !== "Not identified" ? [destination] : []);
+  const sourceEmailSubject = normalized.sourceEmailSubject || json.email_subject || "Not identified";
+  const sourceEmailBody = normalized.sourceEmailBody || json.raw_email_body || "Not identified";
+  const sourceAttachments = normalized.sourceAttachments || [];
+  
+  const finalBillTo = (billTo && billTo !== "Not identified") ? billTo : (destination !== "Not identified" ? destination : "Not identified");
+
+  return {
+    ...json,
+    invoiceNo,
+    comingFrom,
+    destination,
+    products,
+    billTo: finalBillTo,
+    deliveryStart,
+    deliveryStops,
+    sourceEmailSubject,
+    sourceEmailBody,
+    sourceAttachments
+  };
+}
 
 function isOrderEmail(subject, body) {
   const text = (subject + " " + body).toLowerCase();
@@ -305,6 +1475,12 @@ function isOrderEmail(subject, body) {
   if (text.includes("before you submit")) return false;
   if (text.includes("unlock a free")) return false;
   if (text.includes("fares rising")) return false;
+  
+  // Ignore system auto-replies, bounces, and replies to our system emails
+  if (text.includes("this is an automated notification. please do not reply")) return false;
+  if (text.includes("we have successfully scanned and registered your order in our system")) return false;
+  if (subjLower.startsWith("undeliverable:")) return false;
+  if (subjLower.includes("delivery status notification (failure)")) return false;
 
   return true;
 }
@@ -384,7 +1560,7 @@ class EmailScanner {
 
   fetchMessage(imap, uid) {
     return new Promise((resolve, reject) => {
-      const f = imap.fetch(uid, { bodies: "", struct: true });
+      const f = imap.fetch(uid, { bodies: "", struct: true, markSeen: true });
       let msgData = null;
       f.on("message", (msg) => {
         msg.on("body", (stream) => {
@@ -409,6 +1585,7 @@ class EmailScanner {
     const from = parsed.from?.text || "";
     const date = parsed.date || new Date();
     const body = parsed.text || "";
+    const html = parsed.html || "";
 
     // === CRITICAL FIX: Filter out non-order emails ===
     if (!isOrderEmail(subject, body)) {
@@ -421,15 +1598,9 @@ class EmailScanner {
     const emlPath = path.join(__dirname, "uploads", `${emlId}.eml`);
     fs.writeFileSync(emlPath, rawEmail);
 
-    // Parse email context
-    const emailContext = this.parseEmailContext(subject, body);
-    emailContext.email_date = date;
-    emailContext.email_subject = subject;
-    emailContext.raw_email_body = body;
-
     // Process attachments
     const attachments = parsed.attachments || [];
-    let docData = {};
+    const docDataList = [];
     const attachmentPaths = [];
 
     for (const att of attachments) {
@@ -445,7 +1616,8 @@ class EmailScanner {
       // Parse with Docling
       const parsedDoc = await parseWithDocling(attPath, att.filename);
       if (parsedDoc) {
-        docData = { ...docData, ...parsedDoc };
+        parsedDoc.filename = att.filename;
+        docDataList.push(parsedDoc);
       }
 
       // Save attachment record
@@ -457,27 +1629,76 @@ class EmailScanner {
       });
     }
 
-    // Merge data
-    const merged = this.mergeData(docData, emailContext);
-    merged.email_from = from;
-    merged.email_date = date;
-    merged.email_subject = subject;
-    merged.raw_email_body = body;
+    // Normalize and merge data
+    const normalized = normalizeOrderExtraction(subject, from, body, html, docDataList);
 
-    // If no attachments and no meaningful data from email, skip
-    if (attachments.length === 0 && !merged.order_number && !merged.bt_from && !merged.bt_to && !merged.customer_name) {
-      console.log(`[SKIP] No extractable order data from: "${subject.substring(0, 70)}..."`);
-      return null;
+    const data = {
+      order_number: normalized.invoiceNo !== "Not identified" ? normalized.invoiceNo : `BT_${Date.now()}`,
+      invoice_number: normalized.invoiceNo !== "Not identified" ? normalized.invoiceNo : "",
+      email_subject: subject,
+      email_from: from,
+      email_date: date,
+      raw_email_body: body,
+      normalized_data: normalized,
+      pickup_store: normalized.comingFrom !== "Not identified" ? normalized.comingFrom : "",
+      destination_store: normalized.destination !== "Not identified" ? normalized.destination : "",
+      destination_address: normalized.destination !== "Not identified" ? normalized.destination : "",
+      billing_party: normalized.billTo !== "Not identified" ? normalized.billTo : "",
+      location: normalized.destination !== "Not identified" ? normalized.destination : "",
+      line_items: normalized.products,
+      bt_from: normalized.comingFrom !== "Not identified" ? normalized.comingFrom : "",
+      bt_to: normalized.destination !== "Not identified" ? normalized.destination : "",
+    };
+
+    // Calculate Lat/Lon for origin & destination
+    const originStore = STORE_REGISTRY[data.pickup_store];
+    if (originStore) {
+      data.pickup_lat = originStore.lat;
+      data.pickup_lon = originStore.lon;
+    }
+    const destStore = STORE_REGISTRY[data.destination_store];
+    if (destStore) {
+      data.dest_lat = destStore.lat;
+      data.dest_lon = destStore.lon;
+    } else {
+      const storeName = matchStore(data.destination_address);
+      if (storeName && STORE_REGISTRY[storeName]) {
+        data.dest_lat = STORE_REGISTRY[storeName].lat;
+        data.dest_lon = STORE_REGISTRY[storeName].lon;
+      }
     }
 
-    // Create or update order
-    const result = await this.createOrUpdateOrder(merged, emlPath, attachmentPaths);
+    data.rate = 85.00;
+    const bodyLower = (body + " " + html).toLowerCase();
+    data.requires_assembly = bodyLower.includes("assemble") && !bodyLower.includes("customer to assemble");
+    data.has_rubbish_removal = ["rubbish", "take away", "takeaway", "remove rubbish"].some(t => bodyLower.includes(t));
+
+    // Save/update order
+    const orderId = data.order_number;
+    let order = await Order.findByPk(orderId);
+    let isNew = false;
+    if (order) {
+      await order.update(data);
+    } else {
+      data.id = orderId;
+      data.status = "pending";
+      order = await Order.create(data);
+      isNew = true;
+    }
+
+    for (const attPath of attachmentPaths) {
+      const att = await EmailAttachment.findOne({ where: { file_path: attPath } });
+      if (att) await att.update({ order_id: order.id });
+    }
+
+    const orderJson = order.toJSON();
+    orderJson._isNew = isNew;
 
     // Auto-reply confirmation to the sender if it is a new order
-    if (result && result._isNew) {
-      sendEmailConfirmation(result).catch(err => console.error("Auto-reply error:", err));
+    if (orderJson && orderJson._isNew) {
+      sendEmailConfirmation(orderJson).catch(err => console.error("Auto-reply error:", err));
     }
-    return result;
+    return orderJson;
   }
 
   // === IMPROVED EMAIL CONTEXT PARSING ===
@@ -1188,7 +2409,7 @@ app.get("/api/orders", async (req, res) => {
   });
 
   res.json({
-    orders: rows,
+    orders: rows.map(r => getNormalizedOrder(r)),
     pagination: {
       total: count,
       page: parseInt(page),
@@ -1202,7 +2423,7 @@ app.get("/api/orders/:id", async (req, res) => {
   const order = await Order.findByPk(req.params.id);
   if (!order) return res.status(404).json({ error: "Not found" });
   const attachments = await EmailAttachment.findAll({ where: { order_id: order.id } });
-  const orderData = order.toJSON();
+  const orderData = getNormalizedOrder(order);
   orderData.attachments = attachments;
   res.json(orderData);
 });
@@ -1213,14 +2434,14 @@ app.post("/api/orders", async (req, res) => {
     id: data.booking_id || data.order_number || `MANUAL_${Date.now()}`,
     ...data,
   });
-  res.status(201).json(order);
+  res.status(201).json(getNormalizedOrder(order));
 });
 
 app.put("/api/orders/:id", async (req, res) => {
   const order = await Order.findByPk(req.params.id);
   if (!order) return res.status(404).json({ error: "Not found" });
   await order.update(req.body);
-  res.json(order);
+  res.json(getNormalizedOrder(order));
 });
 
 app.delete("/api/orders/:id", async (req, res) => {
@@ -1247,7 +2468,6 @@ app.patch("/api/orders/:id/status", async (req, res) => {
   if (req.body.delivered !== undefined) {
     updates.delivered = req.body.delivered;
     if (req.body.delivered) updates.delivered_at = new Date();
-    // Auto-notify customer via WhatsApp
     if (req.body.delivered) await whatsappService.sendStatusUpdate(order, "delivered");
     notifyField = "delivered";
     notifyValue = req.body.delivered;
@@ -1260,12 +2480,11 @@ app.patch("/api/orders/:id/status", async (req, res) => {
   }
   await order.update(updates);
 
-  // Trigger email notification to original sender
   if (notifyField !== null) {
     await sendEmailNotification(order.toJSON(), notifyField, notifyValue);
   }
 
-  res.json(order);
+  res.json(getNormalizedOrder(order));
 });
 
 // ---------------------------------------------------------------------------
@@ -1396,6 +2615,7 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
       if (fs.existsSync(persistentPath)) fs.unlinkSync(persistentPath);
       return res.status(500).json({ error: "Failed to parse document with Docling." });
     }
+    result.filename = req.file.originalname;
 
     // 2. Create the attachment record so it displays in Details panel
     await EmailAttachment.create({
@@ -1405,23 +2625,66 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
       content_type: req.file.mimetype,
     });
 
-    // 3. Normalize and merge document data using email scanner helper logic
-    const emailContext = {
-      bt_from: null, bt_to: null, order_ref: null,
-      delivery_date: null, warehouse: null,
-      special_instructions: [], is_goods_movement: false,
-      is_return_to_store: false,
-    };
-    
-    const parsedData = emailScanner.mergeData(result, emailContext);
-    parsedData.email_subject = `Manual Upload: ${req.file.originalname}`;
-    parsedData.email_from = "Operations Manual Upload";
-    parsedData.email_date = new Date();
+    // 3. Normalize and merge document data using our extraction layer
+    const subject = `Manual Upload: ${req.file.originalname}`;
+    const from = "Operations Manual Upload";
+    const body = `Manual Upload: ${req.file.originalname}`;
+    const html = "";
+    const docDataList = [result];
 
-    // 4. Save order using emailScanner's DB helper
-    const order = await emailScanner.createOrUpdateOrder(parsedData, null, [persistentPath]);
-    
-    res.json({ status: "success", order, message: "Document parsed and saved." });
+    const normalized = normalizeOrderExtraction(subject, from, body, html, docDataList);
+
+    const data = {
+      order_number: normalized.invoiceNo !== "Not identified" ? normalized.invoiceNo : `MANUAL_${Date.now()}`,
+      invoice_number: normalized.invoiceNo !== "Not identified" ? normalized.invoiceNo : "",
+      email_subject: subject,
+      email_from: from,
+      email_date: new Date(),
+      raw_email_body: body,
+      normalized_data: normalized,
+      pickup_store: normalized.comingFrom !== "Not identified" ? normalized.comingFrom : "",
+      destination_store: normalized.destination !== "Not identified" ? normalized.destination : "",
+      destination_address: normalized.destination !== "Not identified" ? normalized.destination : "",
+      billing_party: normalized.billTo !== "Not identified" ? normalized.billTo : "",
+      location: normalized.destination !== "Not identified" ? normalized.destination : "",
+      line_items: normalized.products,
+      bt_from: normalized.comingFrom !== "Not identified" ? normalized.comingFrom : "",
+      bt_to: normalized.destination !== "Not identified" ? normalized.destination : "",
+    };
+
+    // Calculate Lat/Lon
+    const originStore = STORE_REGISTRY[data.pickup_store];
+    if (originStore) {
+      data.pickup_lat = originStore.lat;
+      data.pickup_lon = originStore.lon;
+    }
+    const destStore = STORE_REGISTRY[data.destination_store];
+    if (destStore) {
+      data.dest_lat = destStore.lat;
+      data.dest_lon = destStore.lon;
+    } else {
+      const storeName = matchStore(data.destination_address);
+      if (storeName && STORE_REGISTRY[storeName]) {
+        data.dest_lat = STORE_REGISTRY[storeName].lat;
+        data.dest_lon = STORE_REGISTRY[storeName].lon;
+      }
+    }
+
+    data.rate = 85.00;
+
+    const orderId = data.order_number;
+    let order = await Order.findByPk(orderId);
+    if (order) {
+      await order.update(data);
+    } else {
+      data.id = orderId;
+      data.status = "pending";
+      order = await Order.create(data);
+    }
+
+    await EmailAttachment.update({ order_id: order.id }, { where: { file_path: persistentPath } });
+
+    res.json({ status: "success", order: getNormalizedOrder(order), message: "Document parsed and saved." });
   } catch (e) {
     console.error("Manual upload parsing error:", e.message);
     if (req.file && req.file.path && fs.existsSync(req.file.path)) {
@@ -2018,13 +3281,32 @@ function startScheduler() {
   console.log("[SCHEDULER] Started - scanning every 5 minutes");
 }
 
+async function waitForDoclingReady() {
+  console.log("[DB] Waiting for Docling service to be ready...");
+  const maxRetries = 90;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const res = await axios.get(`${DOCLING_URL}/health`, { timeout: 2000 });
+      if (res.status === 200) {
+        console.log("[DB] Docling service is ready!");
+        return true;
+      }
+    } catch (err) {
+      // ignore and retry
+    }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  console.warn("[DB] Docling service was not ready in time. Proceeding anyway...");
+  return false;
+}
+
 // ============================================================================
 // INIT & START
 // ============================================================================
 const PORT = process.env.PORT || 5000;
 
 (async () => {
-  await sequelize.sync();
+  await sequelize.sync({ alter: true });
   console.log("[DB] Database synced");
 
   // Seed stores
@@ -2138,9 +3420,145 @@ const PORT = process.env.PORT || 5000;
       email_from: "wairaupark@harveynorman.co.nz",
       email_date: new Date(),
       line_items: [{ sku: "MAT-221", quantity: 1, description: "Tempur Queen Mattress" }],
-      confidence: 0.95,
     });
     console.log("[DB] Seeded orders");
+  }
+
+  // Wait for Docling to be ready
+  await waitForDoclingReady();
+
+  // Reprocess existing orders with the new parser logic to fix "Not identified" and "BT Transport" values
+  try {
+    const { simpleParser } = require("mailparser");
+    const orders = await Order.findAll();
+    console.log(`[DB] Reprocessing ${orders.length} orders to improve extraction quality...`);
+    let reprocessedCount = 0;
+    for (const order of orders) {
+      // 1. Extract values from EML if it exists
+      let subject = order.email_subject || "";
+      let from = order.email_from || "";
+      let body = order.raw_email_body || "";
+      let html = "";
+      
+      if (order.email_screenshot_path && order.email_screenshot_path.endsWith(".eml")) {
+        const basename = path.basename(order.email_screenshot_path);
+        const emlPath = path.join(__dirname, "uploads", basename);
+        if (fs.existsSync(emlPath)) {
+          try {
+            const emailBuffer = fs.readFileSync(emlPath);
+            const parsed = await simpleParser(emailBuffer);
+            subject = parsed.subject || subject;
+            from = parsed.from?.text || from;
+            body = parsed.text || body;
+            html = parsed.html || html;
+          } catch (emlErr) {
+            console.error(`[DB] Error parsing EML for order ${order.id}:`, emlErr.message);
+          }
+        }
+      }
+      
+      // 2. Parse attachments with Docling
+      const doclings = [];
+      const attachments = await EmailAttachment.findAll({ where: { order_id: order.id } });
+      
+      // Collect file paths from email_attachments table
+      let filesToParse = [];
+      const seenFilenames = new Set();
+      for (const att of attachments) {
+        if (att.file_path && fs.existsSync(att.file_path) && att.filename && !seenFilenames.has(att.filename)) {
+          seenFilenames.add(att.filename);
+          filesToParse.push({ path: att.file_path, filename: att.filename });
+        }
+      }
+      
+      // Fallback: If no attachment rows, try parsing from attachment_paths JSON column
+      if (filesToParse.length === 0 && order.attachment_paths) {
+        try {
+          const paths = typeof order.attachment_paths === 'string' ? JSON.parse(order.attachment_paths) : order.attachment_paths;
+          if (Array.isArray(paths)) {
+            for (const p of paths) {
+              if (p && fs.existsSync(p) && !seenFilenames.has(path.basename(p))) {
+                seenFilenames.add(path.basename(p));
+                filesToParse.push({ path: p, filename: path.basename(p) });
+              }
+            }
+          }
+        } catch (e) {}
+      }
+      
+      for (const file of filesToParse) {
+        const ext = path.extname(file.filename || "").toLowerCase();
+        const validExts = [".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".tif", ".bmp", ".gif"];
+        if (!validExts.includes(ext)) continue;
+        
+        // Skip email signature images (Outlook emojis, tiny images, etc.)
+        const nameLower = (file.filename || "").toLowerCase();
+        if (/^(outlookemoji|image\d{3,}|signature|logo|banner|icon|cid)/i.test(nameLower)) continue;
+        try {
+          const fileSize = fs.statSync(file.path).size;
+          if ([".png", ".jpg", ".jpeg", ".gif", ".bmp"].includes(ext) && fileSize < 15000) continue; // Skip tiny images
+        } catch(e) {}
+        
+        const parsedDoc = await parseWithDocling(file.path, file.filename);
+        if (parsedDoc) {
+          parsedDoc.filename = file.filename;
+          doclings.push(parsedDoc);
+        }
+      }
+      
+      // 3. Normalize
+      const normalized = normalizeOrderExtraction(subject, from, body, html, doclings);
+      
+      // Preserve products if new extraction returned empty but the old one had products
+      if ((!normalized.products || normalized.products.length === 0) && order.normalized_data && order.normalized_data.products && order.normalized_data.products.length > 0) {
+        normalized.products = order.normalized_data.products;
+      }
+      
+      // Update order fields
+      order.invoice_number = normalized.invoiceNo !== "Not identified" ? normalized.invoiceNo : order.invoice_number;
+      if (normalized.invoiceNo !== "Not identified" && order.order_number.startsWith("BT_")) {
+        order.order_number = normalized.invoiceNo;
+      }
+      order.pickup_store = normalized.comingFrom;
+      order.destination_store = normalized.destination;
+      order.destination_address = normalized.destination;
+      order.billing_party = normalized.billTo;
+      order.location = normalized.destination;
+      order.line_items = normalized.products;
+      order.bt_from = normalized.comingFrom;
+      order.bt_to = normalized.destination;
+      order.normalized_data = normalized;
+      
+      // Calculate Lat/Lon for origin & destination
+      const originStore = STORE_REGISTRY[order.pickup_store];
+      if (originStore) {
+        order.pickup_lat = originStore.lat;
+        order.pickup_lon = originStore.lon;
+      } else {
+        order.pickup_lat = null;
+        order.pickup_lon = null;
+      }
+      const destStore = STORE_REGISTRY[order.destination_store];
+      if (destStore) {
+        order.dest_lat = destStore.lat;
+        order.dest_lon = destStore.lon;
+      } else {
+        const storeName = matchStore(order.destination_address);
+        if (storeName && STORE_REGISTRY[storeName]) {
+          order.dest_lat = STORE_REGISTRY[storeName].lat;
+          order.dest_lon = STORE_REGISTRY[storeName].lon;
+        } else {
+          order.dest_lat = null;
+          order.dest_lon = null;
+        }
+      }
+      
+      await order.save();
+      reprocessedCount++;
+    }
+    console.log(`[DB] Reprocessed ${reprocessedCount} orders successfully.`);
+  } catch (e) {
+    console.error("[DB] Error reprocessing orders:", e.message);
   }
 
   startScheduler();

@@ -63,6 +63,8 @@ class ParseResult(BaseModel):
     billing_party: str = ""
     location: str = ""
     confidence: float = 0.0
+    raw_markdown: Optional[str] = ""
+    raw_tables: Optional[List[List[List[str]]]] = []
 
 
 class DoclingParser:
@@ -85,7 +87,10 @@ class DoclingParser:
             result = self.converter.convert(file_path)
             markdown = result.document.export_to_markdown()
             tables = self._extract_tables(result.document)
-            return self.extract_order_data(markdown, tables)
+            extracted = self.extract_order_data(markdown, tables)
+            extracted["raw_markdown"] = markdown
+            extracted["raw_tables"] = tables
+            return extracted
         except Exception as e:
             print(f"Docling parse error: {e}")
             return {}
