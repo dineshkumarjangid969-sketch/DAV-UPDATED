@@ -1,0 +1,12 @@
+{
+  "name": "dav-transport-monorepo",
+  "version": "2.0.0",
+  "description": "DAV Transport Delivery Management System - Monorepo Runner",
+  "main": "run.js",
+  "scripts": {
+    "start": "node run.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

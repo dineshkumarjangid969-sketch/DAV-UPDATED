@@ -1,0 +1,101 @@
+
+DAV TRANSPORT - FIXES APPLIED (2026-06-04)
+==========================================
+
+PROBLEM 1: Junk emails in dashboard
+-----------------------------------
+Your PDF showed: "Security alert", "Your Uber One benefits", "Big things are here", 
+"You've received it: NZ", "Before You Submit", "Your payment will be", etc.
+
+FIX: Added email filtering in backend/server.js
+- ORDER_KEYWORDS array: order, delivery, branch transfer, bt, goods movement, 
+  invoice, collection, harvey norman, p/o, purchase order, return to store, etc.
+- JUNK_KEYWORDS array: security alert, uber, payment, promotion, photo from, 
+  widely loved, big things, see you next week, etc.
+- Emails with 2+ junk keywords are automatically skipped
+- Console logs: [SKIP] Not an order email: "..."
+
+PROBLEM 2: BT Type showing "customer_delivery" for branch transfers
+--------------------------------------------------------------------
+Your PDF showed: "Fwd: Branch Transfer" → BT Type = customer_delivery
+
+FIX: Improved BT extraction regex patterns in EmailScanner.parseEmailContext()
+- BT Collection From [Store]
+- Branch Transfer From [Store] to [Store]
+- Goods Movement from [Store] to [Store]
+- BT from [Store] to [Store]
+- [Store] to [Store] BT
+
+Result: BT From = Lower Hutt, BT Type = branch_transfer, Billing = destination store
+
+PROBLEM 3: Random strings in Order # column
+--------------------------------------------
+Your PDF showed: vfHaG1W3-3yW, mdotH0W2-yID6, uf0Nt1ndc2lUML, pG238Y
+
+FIX: Changed ID generation in createOrUpdateOrder()
+- Before: random UUID
+- After: BT_StoreAbbreviation_Date_Time (e.g., BT_LowerH_20260604_1234)
+- Falls back to order_number, invoice_number, or PO number first
+
+PROBLEM 4: Location showing random text
+--------------------------------------
+Your PDF showed: vfHaG1W3-3yW, Logo, pG238Y, on, nalised, mething in Location column
+
+FIX: Fixed location calculation in mergeData()
+- Branch Transfer: location = bt_to || destination_store || destination_address || pickup_store
+- Customer Delivery: location = destination_address || destination_store || pickup_store
+- Added fallback to empty string instead of random text
+
+PROBLEM 5: Billing Party wrong
+-------------------------------
+Your PDF showed: "No", "Palmerstonnorth", "Lowerhutt" as billing party
+
+FIX: Fixed billing_party logic in mergeData()
+- Branch Transfer: billing_party = bt_to (destination store who receives goods)
+- Customer Delivery: billing_party = customer_name
+- Added fallback to "Harvey Norman" if nothing found
+
+PROBLEM 6: Server slow / Dashboard loading all records
+--------------------------------------------------------
+Your PDF had 30+ rows and the server was slow.
+
+FIX: Added pagination to API and frontend
+- Backend: GET /api/orders?page=1&limit=50 (findAndCountAll with offset/limit)
+- Frontend: Pagination controls (Prev/Next/Page X of Y)
+- PDF/Excel export: Date range filtering + 500 record limit
+- Dashboard only loads 50 records at a time
+
+PROBLEM 7: Products column empty
+---------------------------------
+Your PDF showed "—" for products on most rows.
+
+FIX: Docling service extracts tables natively
+- DoclingParser._extract_tables() extracts all tables from document
+- _extract_line_items_from_tables() identifies product tables by headers (SKU, Qty, Description)
+- Returns structured line_items array with sku, quantity, description
+
+FILES MODIFIED
+==============
+- backend/server.js (COMPLETE REWRITE with all fixes)
+- frontend/src/components/Dashboard.js (Pagination support)
+- README.md (Updated with fix documentation)
+
+FILES UNCHANGED
+===============
+- docling-service/app.py (was already correct)
+- frontend/src/components/OrderDetail.js
+- frontend/src/components/RoutePlanner.js
+- frontend/src/components/Settings.js
+- frontend/src/App.js
+
+TO DEPLOY THE FIXES
+===================
+1. Replace your old backend/server.js with the new one
+2. Replace your old frontend/src/components/Dashboard.js with the new one
+3. Restart backend: cd backend && npm start
+4. Restart frontend: cd frontend && npm start
+5. Clear old junk data: Delete the old SQLite database (backend/dav_transport.db) 
+   and let it recreate fresh, OR manually delete junk orders via API/DB
+
+RECOMMENDED: Start fresh by deleting backend/dav_transport.db so the new 
+filtering takes effect on next email scan.

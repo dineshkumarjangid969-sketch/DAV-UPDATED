@@ -1,0 +1,35 @@
+# Node modules
+node_modules/
+**/node_modules/
+
+# Local databases
+*.db
+*.db-journal
+backend/dav_transport.db
+
+# Environment variables
+.env
+backend/.env
+
+# Uploads and temporary files
+backend/uploads/*
+!backend/uploads/.gitkeep
+tmp/
+temp/
+
+# Python caching & virtual environments
+__pycache__/
+**/__pycache__/
+*.pyc
+docling-service/.venv/
+docling-service/venv/
+.venv/
+venv/
+
+# Build outputs
+frontend/build/
+dist/
+
+# OS files
+.DS_Store
+Thumbs.db
