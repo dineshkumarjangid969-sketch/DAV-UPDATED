@@ -1972,9 +1972,9 @@ class EmailScanner {
       const normalized = normalizeOrderExtraction(subject, from, body, html, doc ? [doc] : []);
 
       // Use Docling fields first (doc), then fall back to normalized extraction
-      // For invoice: Docling's supplier_invoice (green) or our extraction
-      // For order: Docling's order_number (blue) or our extraction
-      const invoiceNumRaw = doc && doc.supplier_invoice ? doc.supplier_invoice : normalized.invoiceNo;
+      // For invoice: Docling's invoice_number or our extraction
+      // For order: Docling's order_number or our extraction
+      const invoiceNumRaw = doc && doc.invoice_number ? doc.invoice_number : normalized.invoiceNo;
       const orderNumRaw = doc && doc.order_number ? doc.order_number : normalized.orderNo;
 
       const data = {
@@ -2206,7 +2206,7 @@ class EmailScanner {
   }
 
   async createOrUpdateOrder(data, emlPath, attachmentPaths) {
-    let orderId = data.order_number || data.po_number || data.invoice_number;
+    let orderId = data.invoice_number || data.order_number || data.po_number;
 
     if (!orderId || orderId.length < 3) {
       const btPart = data.bt_from ? data.bt_from.replace(/\s+/g, "").substring(0, 6) : "UNK";
@@ -2218,11 +2218,27 @@ class EmailScanner {
 
     let order = await Order.findByPk(orderId);
 
-    if (!order && data.email_subject && data.email_date) {
+    if (!order && orderId.startsWith("BT_") && data.email_subject && data.email_date) {
       order = await Order.findOne({
         where: { email_subject: data.email_subject },
         order: [["createdAt", "DESC"]],
       });
+    }
+
+    let newLineItems = order ? order.line_items || [] : [];
+    if (data.line_items && data.line_items.length > 0) {
+      if (newLineItems.length === 0) {
+        newLineItems = data.line_items;
+      } else {
+        const existingKeys = new Set(newLineItems.map(i => (i.sku || i.description || "").toLowerCase()));
+        for (const item of data.line_items) {
+          const key = (item.sku || item.description || "").toLowerCase();
+          if (!existingKeys.has(key)) {
+            newLineItems.push(item);
+            existingKeys.add(key);
+          }
+        }
+      }
     }
 
     const updateFields = {
@@ -2244,7 +2260,7 @@ class EmailScanner {
       has_rubbish_removal: data.has_rubbish_removal || false,
       delivery_instructions: data.delivery_instructions || "",
       preferred_delivery_date: data.preferred_delivery_date || "",
-      line_items: data.line_items || [],
+      line_items: newLineItems,
       email_subject: data.email_subject || "",
       email_from: data.email_from || "",
       document_type: data.document_type || "tax_invoice",
