@@ -937,8 +937,14 @@ function extractProducts(body, rawTables, rawMarkdown, doclingLineItems) {
     description = (description || sku || "").trim();
     sku = (sku || "").trim();
     if (description.length < 3 && sku.length < 3) return;
+    const descNorm = description.toLowerCase().replace(/\s+/g, ' ').trim();
+    const skuNorm = sku.toLowerCase().replace(/\s+/g, ' ').trim();
     // Skip noise items
     if (/^(sku|code|item|description|details|total|subtotal|gst|tax|payment|signature|warranty|disclaimer|end of report)$/i.test(description)) return;
+    if (/^(sku\s*\/\s*code|description\s*quantity|sku\s*code\s*description\s*quantity)$/i.test(descNorm)) return;
+    if (/^(sku\s*\/\s*code|description\s*quantity|sku\s*code\s*description\s*quantity)$/i.test(skuNorm)) return;
+    if (/^(this|that|these|those|page|pages|accepted|pending|rejected|years new zealand in|new zealand in)$/i.test(descNorm)) return;
+    if (/^(this|that|these|those)$/i.test(skuNorm) && descNorm.length < 20) return;
     
     const key = description.toLowerCase().replace(/\s+/g, ' ');
     if (seenDescs.has(key)) return;
@@ -982,6 +988,10 @@ function extractProducts(body, rawTables, rawMarkdown, doclingLineItems) {
           let sku = skuIdx >= 0 && skuIdx < row.length ? String(row[skuIdx] || "").trim().replace(/^\*?\s*/, "") : "";
           let desc = descIdx >= 0 && descIdx < row.length ? String(row[descIdx] || "").trim() : "";
           let qtyStr = qtyIdx >= 0 && qtyIdx < row.length ? String(row[qtyIdx] || "").trim() : "1";
+          const rowNorm = `${sku} ${desc} ${qtyStr}`.toLowerCase().replace(/\s+/g, ' ').trim();
+          if (/^(sku\s*\/\s*code|description\s*quantity|sku\s*code\s*description\s*quantity)$/i.test(rowNorm)) continue;
+          if (/^(this|that|these|those|page|pages|accepted|pending|rejected)$/i.test(String(sku || '').toLowerCase().trim()) && (!desc || desc.length < 4)) continue;
+          if (/^(years new zealand in|new zealand in|from harvey norman|harvey norman|wanganui furniture and bedding)$/i.test(String(desc || '').toLowerCase().trim())) continue;
           addProduct(sku, parseInt(qtyStr.replace(/[^\d]/g, ""), 10), desc || sku);
         }
       }
@@ -1015,6 +1025,10 @@ function extractProducts(body, rawTables, rawMarkdown, doclingLineItems) {
           let sku = skuIdx >= 0 && skuIdx < cols.length ? cols[skuIdx] : "";
           let desc = descIdx >= 0 && descIdx < cols.length ? cols[descIdx] : "";
           let qtyStr = qtyIdx >= 0 && qtyIdx < cols.length ? cols[qtyIdx] : "1";
+          const rowNorm = `${sku} ${desc} ${qtyStr}`.toLowerCase().replace(/\s+/g, ' ').trim();
+          if (/^(sku\s*\/\s*code|description\s*quantity|sku\s*code\s*description\s*quantity)$/i.test(rowNorm)) continue;
+          if (/^(this|that|these|those|page|pages|accepted|pending|rejected)$/i.test(String(sku || '').toLowerCase().trim()) && (!desc || desc.length < 4)) continue;
+          if (/^(years new zealand in|new zealand in|from harvey norman|harvey norman|wanganui furniture and bedding)$/i.test(String(desc || '').toLowerCase().trim())) continue;
           addProduct(sku, parseInt(qtyStr.replace(/[^\d]/g, ""), 10), desc || sku);
         }
       } else {
@@ -1856,6 +1870,18 @@ class EmailScanner {
     const date = parsed.date || new Date();
     const body = parsed.text || "";
     const html = parsed.html || "";
+
+    // Skip internal automated replies or messages sent by our own accounts to avoid duplicates
+    const fromLower = (from || '').toLowerCase();
+    const accountEmail = (account && account.email) ? String(account.email).toLowerCase() : '';
+    const isAutoSender = /no-?reply|noreply|do-?not-?reply|auto-?reply|autoresponder/.test(fromLower);
+    const isFromUs = accountEmail && fromLower.includes(accountEmail);
+    const subjectLower = (subject || '').toLowerCase();
+    const isReply = subjectLower.startsWith('re:') || subjectLower.startsWith('fw:') || subjectLower.startsWith('fwd:');
+    if (isAutoSender || isFromUs || isReply) {
+      console.log(`[SKIP] Internal/auto-reply or forwarded message from ${from} subject="${subject}"`);
+      return null;
+    }
 
     if (!isOrderEmail(subject, body)) {
       console.log(`[SKIP] Not an order email: "${subject.substring(0, 70)}..."`);

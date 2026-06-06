@@ -10,11 +10,7 @@
         "bt_from": "Hamilton",
         "bt_to": "Whanganui"
       },
-      "patch": {
-        "orderNo": "BT_59c158c6",
-        "comingFrom": "Hamilton",
-        "destination": "Whanganui"
-      }
+      "patch": {}
     },
     {
       "order_id": "BT_60fa36d8",
@@ -25,11 +21,7 @@
         "bt_from": "Hamilton",
         "bt_to": "Whanganui"
       },
-      "patch": {
-        "orderNo": "BT_60fa36d8",
-        "comingFrom": "Hamilton",
-        "destination": "Whanganui"
-      }
+      "patch": {}
     },
     {
       "order_id": "BT_a2c57f26",
@@ -40,11 +32,7 @@
         "bt_from": "Hamilton",
         "bt_to": "Whanganui"
       },
-      "patch": {
-        "orderNo": "BT_a2c57f26",
-        "comingFrom": "Hamilton",
-        "destination": "Whanganui"
-      }
+      "patch": {}
     },
     {
       "order_id": "BT_c6407efd",
@@ -55,11 +43,7 @@
         "bt_from": "Hamilton",
         "bt_to": "Whanganui"
       },
-      "patch": {
-        "orderNo": "BT_c6407efd",
-        "comingFrom": "Hamilton",
-        "destination": "Whanganui"
-      }
+      "patch": {}
     },
     {
       "order_id": "BT_5516a620",
@@ -70,11 +54,7 @@
         "bt_from": "Hamilton",
         "bt_to": "Whanganui"
       },
-      "patch": {
-        "orderNo": "BT_5516a620",
-        "comingFrom": "Hamilton",
-        "destination": "Whanganui"
-      }
+      "patch": {}
     },
     {
       "order_id": "oice",
@@ -85,11 +65,7 @@
         "bt_from": "Mt Wellington",
         "bt_to": "Not identified"
       },
-      "patch": {
-        "orderNo": "248165",
-        "invoiceNo": "831158",
-        "comingFrom": "Mt Wellington"
-      }
+      "patch": {}
     },
     {
       "order_id": "BT_Albany_20260604_1316",
@@ -100,10 +76,7 @@
         "bt_from": "Lower Hutt",
         "bt_to": "Hamilton"
       },
-      "patch": {
-        "comingFrom": "Lower Hutt",
-        "destination": "Hamilton"
-      }
+      "patch": {}
     },
     {
       "order_id": "3831158",
@@ -114,11 +87,7 @@
         "bt_from": "Mt Wellington",
         "bt_to": "Not identified"
       },
-      "patch": {
-        "orderNo": "248165",
-        "invoiceNo": "831158",
-        "comingFrom": "Mt Wellington"
-      }
+      "patch": {}
     }
   ]
 }

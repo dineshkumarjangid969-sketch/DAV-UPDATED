@@ -15,7 +15,9 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build"
+    "build": "react-scripts build",
+    "serve-prod": "node start-frontend.js",
+    "serve-pm2": "pm2 start ../ecosystem.config.js --only dav-frontend"
   },
   "browserslist": {
     "production": [">0.2%", "not dead", "not op_mini all"],
