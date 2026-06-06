@@ -110,14 +110,21 @@ class DoclingParser:
 
     def extract_order_data(self, text: str, tables: List[List[List[str]]]) -> Dict:
         text_upper = text.upper()
-        doc_type = "tax_invoice"
-        if "PURCHASE ORDER" in text_upper or "P/O RESPONSE" in text_upper:
+        doc_type = "tax_invoice" # Default
+        
+        # --- NEW CLASSIFICATION ROUTER ---
+        if "SALES ORDER" in text_upper and "BT" in text_upper:
+            doc_type = "bt_sales_order"
+        elif "TAPE CONTENTS" in text_upper:
+            doc_type = "bt_tape_contents"
+        elif "PURCHASE ORDER" in text_upper or "P/O RESPONSE" in text_upper:
             doc_type = "purchase_order"
         elif re.search(r"\b(?:GOODS MOVEMENT|BRANCH TRANSFER|OFFSITE TO SHOWROOM|BT(?:\s*\d*)?(?:\s+FROM|\b))\b", text_upper):
             doc_type = "branch_transfer"
         elif any(x in text_upper for x in ["RETURN TO STORE", "RETURN TO SHOWROOM", "RETURN TO WAREHOUSE", "CUSTOMER RETURN"]):
             doc_type = "return_to_store"
 
+        # Initialize the result dictionary (keep your existing setup)
         result = {
             "document_type": doc_type,
             "client_name": "Harvey Norman",
@@ -131,7 +138,12 @@ class DoclingParser:
             "billing_party": "", "location": "", "confidence": 0,
         }
 
-        if doc_type == "tax_invoice":
+        # --- EXECUTE THE CORRECT RULESET ---
+        if doc_type == "bt_sales_order":
+            self._parse_bt_sales_order(text, tables, result)
+        elif doc_type == "bt_tape_contents":
+            self._parse_bt_tape_contents(text, result)
+        elif doc_type == "tax_invoice":
             self._parse_tax_invoice(text, tables, result)
         elif doc_type == "purchase_order":
             self._parse_purchase_order(text, tables, result)
@@ -299,6 +311,104 @@ class DoclingParser:
             result["order_number"] = order_match.group(1).strip()
         if not result["line_items"]:
             self._extract_line_items_from_text(text, result)
+
+    def _parse_bt_sales_order(self, text: str, tables: List[List[List[str]]], result: Dict):
+        """Ruleset 1: Parses structured Sales Order layouts"""
+        result["type"] = "branch_transfer"
+        result["bt_type"] = "sales_order"
+        
+        # 1. Origin Store
+        origin_match = re.search(r"trading as Harvey Norman Furniture\s+([A-Za-z\s]+)", text, re.IGNORECASE)
+        if origin_match:
+            result["bt_from"] = self._normalize_store(origin_match.group(1).strip())
+            result["pickup_store"] = result["bt_from"]
+
+        # 2 & 3. Destination Store & Address (Look below GST No.)
+        # This regex looks for GST No, then grabs the next line (Store) and the line after (Address)
+        dest_match = re.search(r"GST No\.\s*[\d\.]+\s*\n\s*([^\n]+)\n\s*([^\n]+)", text, re.IGNORECASE)
+        if dest_match:
+            result["bt_to"] = self._normalize_store(dest_match.group(1).strip())
+            result["destination_store"] = result["bt_to"]
+            result["destination_address"] = dest_match.group(2).strip()
+
+        # 4. Purchase Order (Last 6 digits)
+        po_match = re.search(r"Purchase Order[:\s]*.*?(\d{6})\b", text, re.IGNORECASE)
+        if po_match:
+            result["order_number"] = po_match.group(1).strip()
+            
+        # 5. Products & Quantity (Using table structures)
+        if tables:
+            for table in tables:
+                if not table or len(table) < 2:
+                    continue
+                headers = [str(h).lower() for h in table[0]]
+                if "items" in headers and "qty" in headers:
+                    item_idx = headers.index("items")
+                    qty_idx = headers.index("qty")
+                    
+                    for row in table[1:]:
+                        if len(row) > max(item_idx, qty_idx):
+                            desc = str(row[item_idx]).strip()
+                            qty_str = str(row[qty_idx]).strip()
+                            if desc:
+                                try:
+                                    qty = int(qty_str) if qty_str else 1
+                                except ValueError:
+                                    qty = 1
+                                result["line_items"].append({"description": desc, "quantity": qty, "sku": ""})
+
+    def _parse_bt_tape_contents(self, text: str, result: Dict):
+        """Ruleset 2: Parses unstructured Tape Contents layouts"""
+        result["type"] = "branch_transfer"
+        result["bt_type"] = "tape_contents"
+
+        # 1. Extract Order Number
+        order_match = re.search(r"P/O Response\s+(\d+)", text, re.IGNORECASE)
+        if order_match:
+            result["order_number"] = order_match.group(1).strip()
+
+        # 2. Extract Origin Store (Listed underneath "Response From:")
+        origin_match = re.search(r"Response From:\s*[^\n]+\n\s*([A-Za-z\s]+)", text, re.IGNORECASE)
+        if origin_match:
+            result["bt_from"] = self._normalize_store(origin_match.group(1).strip())
+            result["pickup_store"] = result["bt_from"]
+
+        # 3. Extract Invoice Number
+        invoice_match = re.search(r"Supplier Invoice:\s*(\d+)", text, re.IGNORECASE)
+        if invoice_match:
+            result["invoice_number"] = invoice_match.group(1).strip()
+
+        # 4 & 5. Products and Quantities Loop
+        # Split text using case-insensitive 'Accepted'
+        segments = re.split(r"(?i)Accepted", text)
+        
+        for i in range(len(segments) - 1):
+            product_chunk = segments[i]
+            quantity_chunk = segments[i + 1]
+            
+            # Product: Grab the last non-empty line BEFORE "Accepted"
+            lines_before = [line.strip() for line in product_chunk.split('\n') if line.strip()]
+            if lines_before:
+                # Avoid picking up header junk if it's the very first loop
+                potential_product = lines_before[-1]
+                if not "Supplier Invoice" in potential_product: 
+                    product_name = potential_product
+                else:
+                    product_name = "Unknown Product"
+            else:
+                product_name = "Unknown Product"
+                
+            # Quantity: Search for Delivered Qty AFTER "Accepted"
+            qty_match = re.search(r"(?:Delv Qty|Delivered qty|Del qty)[:\s]*(\d+)", quantity_chunk, re.IGNORECASE)
+            quantity = int(qty_match.group(1)) if qty_match else 0
+            
+            # Only append if we found a valid quantity (prevents empty trailing chunks from adding junk)
+            if quantity > 0:
+                result["line_items"].append({
+                    "description": product_name,
+                    "quantity": quantity,
+                    "sku": ""
+                })
 
     def _extract_store_info(self, text: str, result: Dict):
         header = text[:3000]
