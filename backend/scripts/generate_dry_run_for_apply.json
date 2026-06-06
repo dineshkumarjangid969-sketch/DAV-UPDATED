@@ -1,0 +1,38 @@
+{
+  "generated_at": "2026-06-06T03:19:53.308Z",
+  "proposals": [
+    {
+      "order_id": "oice",
+      "score": 7,
+      "proposed": {
+        "order_number": "248165",
+        "invoice_number": "831158",
+        "bt_from": "Mt Wellington",
+        "bt_to": "Not identified"
+      },
+      "patch": {}
+    },
+    {
+      "order_id": "BT_Albany_20260604_1316",
+      "score": 5,
+      "proposed": {
+        "order_number": "Not identified",
+        "invoice_number": "Not identified",
+        "bt_from": "Lower Hutt",
+        "bt_to": "Hamilton"
+      },
+      "patch": {}
+    },
+    {
+      "order_id": "3831158",
+      "score": 7,
+      "proposed": {
+        "order_number": "248165",
+        "invoice_number": "831158",
+        "bt_from": "Mt Wellington",
+        "bt_to": "Not identified"
+      },
+      "patch": {}
+    }
+  ]
+}
