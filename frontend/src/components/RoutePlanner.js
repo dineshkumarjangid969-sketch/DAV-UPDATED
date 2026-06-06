@@ -170,14 +170,14 @@ export default function RoutePlanner() {
                         <span className="font-bold text-slate-250">{o.invoiceNo || "Not identified"}</span>
                         <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider border ${
                           o.bt_type === "customer_delivery" ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
-                          o.bt_type === "goods_movement" ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
+                          (o.bt_type === "branch_transfer" || (o.bt_type && o.bt_type.toLowerCase().includes("goods"))) ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
                           o.bt_type === "return_to_store" ? "bg-rose-500/10 text-rose-400 border-rose-500/20" :
                           "bg-purple-500/10 text-purple-400 border-purple-500/20"
                         }`}>
-                          {o.bt_type?.replace(/_/g, " ")}
+                          {(o.bt_type === "branch_transfer" || (o.bt_type && o.bt_type.toLowerCase().includes("goods"))) ? "BT Branch Transfer" : o.bt_type?.replace(/_/g, " ")}
                         </span>
                       </div>
-                      <p className="text-slate-400 text-xs mt-1 truncate">{o.destination || "Not identified"}</p>
+                      <p className="text-slate-400 text-xs mt-1 truncate">{o.bt_order_type ? `${o.bt_order_type} · ${o.destination || "Not identified"}` : o.destination || "Not identified"}</p>
                     </div>
                   </div>
                 ))}

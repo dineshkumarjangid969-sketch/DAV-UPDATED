@@ -113,8 +113,8 @@ class DoclingParser:
         doc_type = "tax_invoice"
         if "PURCHASE ORDER" in text_upper or "P/O RESPONSE" in text_upper:
             doc_type = "purchase_order"
-        elif any(x in text_upper for x in ["GOODS MOVEMENT", "BRANCH TRANSFER", "OFFSITE TO SHOWROOM", "BT FROM"]):
-            doc_type = "goods_movement"
+        elif re.search(r"\b(?:GOODS MOVEMENT|BRANCH TRANSFER|OFFSITE TO SHOWROOM|BT(?:\s*\d*)?(?:\s+FROM|\b))\b", text_upper):
+            doc_type = "branch_transfer"
         elif any(x in text_upper for x in ["RETURN TO STORE", "RETURN TO SHOWROOM", "RETURN TO WAREHOUSE", "CUSTOMER RETURN"]):
             doc_type = "return_to_store"
 
@@ -135,7 +135,7 @@ class DoclingParser:
             self._parse_tax_invoice(text, tables, result)
         elif doc_type == "purchase_order":
             self._parse_purchase_order(text, tables, result)
-        elif doc_type == "goods_movement":
+        elif doc_type == "branch_transfer":
             self._parse_goods_movement(text, tables, result)
         elif doc_type == "return_to_store":
             self._parse_return_to_store(text, tables, result)
@@ -277,12 +277,13 @@ class DoclingParser:
 
     def _parse_goods_movement(self, text: str, tables, result: Dict):
         result["type"] = "branch_transfer"
-        result["bt_type"] = "goods_movement"
+        result["bt_type"] = "branch_transfer"
         bt_patterns = [
             r"(?:from|OFFSITE)[:\s]+([A-Za-z\s]+?)(?:\s+to\s+|\s*→\s*)([A-Za-z\s]+)",
             r"From\s*:\s*([A-Za-z\s]+?)\s+To\s*:\s*([A-Za-z\s]+)",
-            r"BT\s+From\s+([A-Za-z\s]+?)\s+To\s+([A-Za-z\s]+)",
-            r"Branch\s+Transfer\s+(?:from\s+)?([A-Za-z\s]+?)\s+(?:to\s+)([A-Za-z\s]+)",
+            r"BT(?:\s*\d*)?\s*(?:Collection\s+)?From\s+([A-Za-z\s]+?)\s+To\s+([A-Za-z\s]+)",
+            r"BT(?:\s*\d*)?\s+From\s+([A-Za-z\s]+?)\s+To\s+([A-Za-z\s]+)",
+            r"Branch\s+Transfer\s+(?:From\s+)?([A-Za-z\s]+?)\s+(?:To\s+)([A-Za-z\s]+)",
             r"Goods\s+Movement\s+(?:from\s+)?([A-Za-z\s]+?)\s+(?:to\s+)([A-Za-z\s]+)",
         ]
         for pattern in bt_patterns:

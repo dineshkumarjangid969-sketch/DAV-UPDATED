@@ -9,7 +9,8 @@ export default function Dashboard({ onSelectOrder }) {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
-  const [filterBT, setFilterBT] = useState("");
+  const [filterOrderType, setFilterOrderType] = useState("all");
+  const [filterStore, setFilterStore] = useState("");
   const [scanning, setScanning] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [metrics, setMetrics] = useState({ total: 0, pickedUp: 0, delivered: 0, pending: 0 });
@@ -21,7 +22,7 @@ export default function Dashboard({ onSelectOrder }) {
       loadMetrics();
     }, 300);
     return () => clearTimeout(timer);
-  }, [search, filterStatus, filterBT]);
+  }, [search, filterStatus, filterStore, filterOrderType]);
 
   const loadOrders = async (page = 1) => {
     setLoading(true);
@@ -29,7 +30,9 @@ export default function Dashboard({ onSelectOrder }) {
       const params = new URLSearchParams();
       if (search) params.append("search", search);
       if (filterStatus) params.append("status", filterStatus);
-      if (filterBT) params.append("bt_type", filterBT);
+      // no bt_type param is sent from UI (BT filtering removed)
+      if (filterOrderType && filterOrderType !== "all") params.append("bt_order_type", filterOrderType);
+      if (filterStore) params.append("store", filterStore);
       params.append("page", page);
       params.append("limit", 50);
 
@@ -101,8 +104,8 @@ export default function Dashboard({ onSelectOrder }) {
 
   const handleStatusToggle = async (order, field) => {
     try {
-      await API.patch(`/orders/${order.id}/status`, { [field]: !order[field] });
-      loadOrders(pagination.page);
+      await API.patch(`/orders/${encodeURIComponent(encodeURIComponent(order.id))}/status`, { [field]: !order[field] });
+      await loadOrders(pagination.page);
       loadMetrics();
     } catch (e) {
       alert("Update failed: " + e.message);
@@ -111,10 +114,10 @@ export default function Dashboard({ onSelectOrder }) {
 
   const handleDeleteOrder = async (e, id) => {
     e.stopPropagation();
-    if (!window.confirm("Are you sure you want to delete this order?")) return;
+    if (!window.confirm("Delete this order?")) return;
     try {
-      await API.delete(`/orders/${id}`);
-      loadOrders(pagination.page);
+      await API.delete(`/orders/${encodeURIComponent(encodeURIComponent(id))}`);
+      await loadOrders(pagination.page);
       loadMetrics();
     } catch (err) {
       alert("Delete failed: " + err.message);
@@ -185,18 +188,27 @@ export default function Dashboard({ onSelectOrder }) {
             <option value="completed">Completed</option>
           </select>
 
+          {/* Branch transfer filter removed per user request */}
+
           <select 
             className="bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-300 outline-none cursor-pointer focus:border-blue-500" 
-            value={filterBT} 
-            onChange={(e) => setFilterBT(e.target.value)}
+            value={filterOrderType} 
+            onChange={(e) => setFilterOrderType(e.target.value)}
           >
-            <option value="">All Types</option>
-            <option value="customer_delivery">Customer Delivery</option>
-            <option value="branch_transfer">Branch Transfer</option>
-            <option value="goods_movement">Goods Movement</option>
-            <option value="purchase_order">Purchase Order</option>
-            <option value="return_to_store">Return to Store</option>
+            <option value="all">All Route Types</option>
+            <option value="Local">Local</option>
+            <option value="Line-Haul">Line-Haul</option>
+            <option value="Line-Haul + Local">Line-Haul + Local</option>
+            <option value="Not identified">Not identified</option>
           </select>
+
+          <input 
+            type="text" 
+            placeholder="Filter by Store..."
+            className="bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-sm text-slate-300 outline-none w-36 focus:border-blue-500"
+            value={filterStore}
+            onChange={(e) => setFilterStore(e.target.value)}
+          />
         </div>
 
         {/* Buttons */}
@@ -236,10 +248,11 @@ export default function Dashboard({ onSelectOrder }) {
             <thead className="bg-slate-950/60 text-slate-400 border-b border-slate-800 text-[11px] uppercase tracking-wider font-semibold">
               <tr>
                 <th className="px-4 py-3 text-left">Invoice #</th>
+                <th className="px-4 py-3 text-left">Order #</th>
                 <th className="px-4 py-3 text-left">Subject</th>
                 <th className="px-4 py-3 text-left">Email Date</th>
                 <th className="px-4 py-3 text-left">Products</th>
-                <th className="px-4 py-3 text-left">BT Type</th>
+                <th className="px-4 py-3 text-left">BT Route Type</th>
                 <th className="px-4 py-3 text-left">Coming From</th>
                 <th className="px-4 py-3 text-left">Destination</th>
                 <th className="px-4 py-3 text-left">Bill To</th>
@@ -254,14 +267,14 @@ export default function Dashboard({ onSelectOrder }) {
             <tbody className="divide-y divide-slate-800/50">
               {loading ? (
                 <tr>
-                  <td colSpan={14} className="px-4 py-12 text-center text-slate-500">
+                  <td colSpan={15} className="px-4 py-12 text-center text-slate-500">
                     <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-blue-500" />
                     Syncing database...
                   </td>
                 </tr>
               ) : orders.length === 0 ? (
                 <tr>
-                  <td colSpan={14} className="px-4 py-12 text-center text-slate-500">
+                  <td colSpan={15} className="px-4 py-12 text-center text-slate-500">
                     No orders matched search criteria.
                   </td>
                 </tr>
@@ -275,6 +288,9 @@ export default function Dashboard({ onSelectOrder }) {
                     <td className="px-4 py-3.5 text-slate-400 font-mono text-xs">
                       {order.invoiceNo || "Not identified"}
                     </td>
+                    <td className="px-4 py-3.5 text-slate-400 font-mono text-xs text-indigo-400 font-bold">
+                      {order.order_number || order.invoiceNo || "Not identified"}
+                    </td>
                     <td className="px-4 py-3.5 max-w-[150px] truncate text-slate-300 text-xs" title={order.sourceEmailSubject}>
                       {order.sourceEmailSubject || "Not identified"}
                     </td>
@@ -284,16 +300,8 @@ export default function Dashboard({ onSelectOrder }) {
                     <td className="px-4 py-3.5 max-w-[150px] truncate text-slate-400 text-xs" title={formatProducts(order.products)}>
                       {formatProducts(order.products)}
                     </td>
-                    <td className="px-4 py-3.5">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide border ${
-                        order.bt_type === "customer_delivery" ? "bg-blue-950/40 text-blue-400 border-blue-500/20" :
-                        order.bt_type === "goods_movement" ? "bg-amber-950/40 text-amber-400 border-amber-500/20" :
-                        order.bt_type === "purchase_order" ? "bg-purple-950/40 text-purple-400 border-purple-500/20" :
-                        order.bt_type === "return_to_store" ? "bg-red-950/40 text-red-400 border-red-500/20" :
-                        "bg-slate-900 text-slate-400 border-slate-800"
-                      }`}>
-                        {order.bt_type?.replace(/_/g, " ") || "—"}
-                      </span>
+                    <td className="px-4 py-3 text-slate-300 text-xs truncate max-w-[120px]" title={order.bt_order_type}>
+                      {order.bt_order_type || "Not identified"}
                     </td>
                     <td className="px-4 py-3.5 text-slate-300 text-xs truncate max-w-[100px]" title={order.comingFrom}>
                       {order.comingFrom || "Not identified"}

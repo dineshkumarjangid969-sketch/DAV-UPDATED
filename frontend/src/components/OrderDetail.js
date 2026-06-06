@@ -85,12 +85,16 @@ export default function OrderDetail({ order, onBack }) {
             <div className="grid grid-cols-2 gap-y-3 text-xs">
               <div>
                 <p className="text-slate-500 uppercase tracking-wider font-semibold text-[10px]">BT Type</p>
-                <p className="text-slate-200 mt-0.5 capitalize">{data.bt_type?.replace(/_/g, " ") || "Not identified"}</p>
+                <p className="text-slate-200 mt-0.5 capitalize">{(data.bt_type === 'branch_transfer' || (data.bt_type && data.bt_type.toLowerCase().includes('goods'))) ? 'BT Branch Transfer' : data.bt_type === 'return_to_store' ? 'Return to Store' : data.bt_type === 'purchase_order' ? 'Purchase Order' : data.bt_type?.replace(/_/g, " ") || "Not identified"}</p>
               </div>
               <div>
                 <p className="text-slate-500 uppercase tracking-wider font-semibold text-[10px]">Bill To</p>
                 <p className="text-slate-200 mt-0.5">{data.billTo || "Not identified"}</p>
               </div>
+                  <div>
+                    <p className="text-slate-500 uppercase tracking-wider font-semibold text-[10px]">BT Route Type</p>
+                    <p className="text-slate-200 mt-0.5">{data.bt_order_type || "Not identified"}</p>
+                  </div>
               <div>
                 <p className="text-slate-500 uppercase tracking-wider font-semibold text-[10px]">BT Origin / Store</p>
                 <p className="text-slate-200 mt-0.5">{data.comingFrom || "Not identified"}</p>
