@@ -391,7 +391,7 @@ const STORE_REGISTRY = {
   "Whakatane": { lat: -37.9534, lon: 176.9908, region: "Bay of Plenty", aliases: ["whakatane"] },
   "Whangarei": { lat: -35.7251, lon: 174.3237, region: "Northland", aliases: ["whangarei"] },
   "Hastings": { lat: -39.6396, lon: 176.8392, region: "Hawkes Bay", aliases: ["hastings", "akina"] },
-  "Mt Wellington": { lat: -36.8939, lon: 174.8470, region: "Auckland", aliases: ["mt wellington", "mount wellington"] },
+  "Mt Wellington": { lat: -36.8939, lon: 174.8470, region: "Auckland", aliases: ["mt wellington", "mount wellington", "mt. wellington", "mt.wellington"] },
   "Manukau": { lat: -36.9896, lon: 174.8696, region: "Auckland", aliases: ["manukau"] },
   "Porirua": { lat: -41.1337, lon: 174.8406, region: "Wellington", aliases: ["porirua"] },
   "New Plymouth": { lat: -39.0556, lon: 174.0752, region: "Taranaki", aliases: ["new plymouth"] },
@@ -970,6 +970,12 @@ function extractProducts(body, rawTables, rawMarkdown, doclingLineItems, subject
     
     const key = description.toLowerCase().replace(/\s+/g, ' ');
     if (seenDescs.has(key)) return;
+    
+    // Explicitly ignore dimensions (e.g. 1617 x 950 MMT or 28.00 KGM)
+    if (/^\d+(\.\d+)?\s*(x|mmt|kg|kgm|cm|mm|m|\*)\s*$/i.test(descNorm)) return;
+    if (/\d+\s*x\s*\d+/i.test(descNorm) && /(mm|cm|m|mmt|kg|kgm)$/i.test(descNorm) && descNorm.length < 25) return;
+    if (descNorm === "1617 x 950 mmt" || descNorm.includes("1617 x 950 mmt")) return;
+
     seenDescs.add(key);
     
     if (isNaN(quantity) || quantity <= 0) quantity = 1;
@@ -1190,6 +1196,21 @@ function extractProducts(body, rawTables, rawMarkdown, doclingLineItems, subject
     addProduct("", parseInt(match[1], 10), match[2].trim());
   }
   
+  if (products.length > 0) return products;
+  
+  // ─── Strategy 6.5: Direct match for product code then product name ───
+  // Example: QA65S90FAEXNZ \n SAMSUNG 65IN S90F OLED 4K AI TV
+  for (let i = 0; i < allLines.length - 1; i++) {
+    const line1 = allLines[i].trim();
+    const line2 = allLines[i + 1].trim();
+    if (/^[A-Z0-9\-]{8,20}$/i.test(line1) && line2.length > 10 && !/^(QA|SN|MAC|IP)/.test(line2) && !line2.includes("x")) {
+      // Looks like SKU followed by Product name
+      if (line2.toLowerCase().includes("samsung") || line2.toLowerCase().includes("tv") || line2.toLowerCase().includes("oled")) {
+        addProduct(line1, 1, line2);
+      }
+    }
+  }
+
   if (products.length > 0) return products;
   
   // ─── Strategy 7: Natural language product mentions from email body ───
@@ -1961,9 +1982,32 @@ class EmailScanner {
 
       const validExts = [".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".tif", ".bmp", ".gif"];
       const savedAttachments = [];
+      const emailMessageId = parsed.messageId || subject;
+      
       for (const att of attachments) {
         const ext = path.extname(att.filename || "").toLowerCase();
         if (!validExts.includes(ext)) continue;
+
+        // Skip small images (usually email signatures) under 15KB
+        if (att.size < 15000 && [".png", ".jpg", ".jpeg", ".gif"].includes(ext)) {
+          console.log(`[SKIP] Ignoring small image ${att.filename} (${att.size} bytes).`);
+          continue;
+        }
+
+        // Prevent exact duplicates
+        const existingAtt = await EmailAttachment.findOne({
+          where: { filename: att.filename },
+          order: [['createdAt', 'DESC']]
+        });
+        
+        // If an attachment with this exact name was created in the last 2 hours, skip saving it again to avoid massive duplication
+        if (existingAtt && (new Date() - new Date(existingAtt.createdAt)) < 2 * 60 * 60 * 1000) {
+           console.log(`[SKIP] Attachment ${att.filename} was already processed recently.`);
+           if (ext === ".pdf") {
+             attachmentPaths.push(existingAtt.file_path);
+           }
+           continue;
+        }
 
         const attId = uuidv4();
         const attPath = path.join(__dirname, "uploads", `${attId}${ext}`);
@@ -2098,6 +2142,7 @@ class EmailScanner {
         line_items: normalized.products,
         bt_from: normalized.comingFrom !== "Not identified" ? normalized.comingFrom : "",
         bt_to: normalized.destination !== "Not identified" ? normalized.destination : "",
+        email_screenshot_path: emlPath,
       };
 
       const originStore = STORE_REGISTRY[data.pickup_store];
@@ -2199,15 +2244,15 @@ class EmailScanner {
 
     const btSubjectPatterns = [
       // BT Collection From [Store]
-      /BT\s+(?:Collection\s+)?From\s+([A-Za-z\s]+?)(?:\s+to\s+([A-Za-z\s]+))?/i,
+      /BT\s+(?:Collection\s+)?From\s+([A-Za-z\.\s]+?)(?:\s+to\s+([A-Za-z\.\s]+))?/i,
       // Branch Transfer From [Store] to [Store]
-      /Branch\s+Transfer\s+(?:From\s+)?([A-Za-z\s]+?)\s+(?:to\s+)([A-Za-z\s]+)/i,
+      /Branch\s+Transfer\s+(?:From\s+)?([A-Za-z\.\s]+?)\s+(?:to\s+)([A-Za-z\.\s]+)/i,
       // Goods Movement from [Store] to [Store]
-      /Goods\s+Movement\s+(?:from\s+)?([A-Za-z\s]+?)\s+(?:to\s+)([A-Za-z\s]+)/i,
+      /Goods\s+Movement\s+(?:from\s+)?([A-Za-z\.\s]+?)\s+(?:to\s+)([A-Za-z\.\s]+)/i,
       // BT from [Store] to [Store]
-      /BT\s+(?:from\s+)?([A-Za-z\s]+?)\s+(?:to\s+)([A-Za-z\s]+)/i,
+      /BT\s+(?:from\s+)?([A-Za-z\.\s]+?)\s+(?:to\s+)([A-Za-z\.\s]+)/i,
       // [Store] to [Store] BT
-      /([A-Za-z\s]+?)\s+(?:to|→)\s+([A-Za-z\s]+)\s+(?:BT|Branch Transfer|Goods Movement)/i,
+      /([A-Za-z\.\s]+?)\s+(?:to|→)\s+([A-Za-z\.\s]+)\s+(?:BT|Branch Transfer|Goods Movement)/i,
     ];
 
     for (const pattern of btSubjectPatterns) {
@@ -2222,9 +2267,9 @@ class EmailScanner {
 
     if (!context.bt_from) {
       const bodyBtPatterns = [
-        /(?:from|OFFSITE)[:\s]+([A-Za-z\s]+?)(?:\s+to\s+|\s*→\s*)([A-Za-z\s]+)/i,
-        /From\s*:\s*([A-Za-z\s]+?)\s+To\s*:\s*([A-Za-z\s]+)/i,
-        /BT\s+From\s+([A-Za-z\s]+?)\s+To\s+([A-Za-z\s]+)/i,
+        /(?:from|OFFSITE)[:\s]+([A-Za-z\.\s]+?)(?:\s+to\s+|\s*→\s*)([A-Za-z\.\s]+)/i,
+        /From\s*:\s*([A-Za-z\.\s]+?)\s+To\s*:\s*([A-Za-z\.\s]+)/i,
+        /BT\s+From\s+([A-Za-z\.\s]+?)\s+To\s+([A-Za-z\.\s]+)/i,
       ];
       for (const pattern of bodyBtPatterns) {
         const match = body.match(pattern);
@@ -2324,6 +2369,11 @@ class EmailScanner {
   }
 
   async createOrUpdateOrder(data, emlPath, attachmentPaths) {
+    if ((data.type || "customer_delivery") === "customer_delivery" && data.type !== "branch_transfer") {
+      console.log(`[SKIP] Discarding customer_delivery order: ${data.invoice_number || data.order_number || data.po_number}`);
+      return null;
+    }
+
     let orderId = data.invoice_number || data.order_number || data.po_number;
 
     if (!orderId || orderId.length < 3) {
@@ -2744,6 +2794,26 @@ const routeOptimizer = new RouteOptimizer();
 // EXPORT SERVICE
 // ============================================================================
 class ExportService {
+  // Helper: extract btOrderType from normalized_data JSON
+  _getBtRouteType(order) {
+    try {
+      const nd = typeof order.normalized_data === "string"
+        ? JSON.parse(order.normalized_data || "{}")
+        : (order.normalized_data || {});
+      return nd.btOrderType || "";
+    } catch { return ""; }
+  }
+
+  // Helper: sum total quantity from line_items
+  _getTotalQuantity(order) {
+    try {
+      const items = typeof order.line_items === "string"
+        ? JSON.parse(order.line_items || "[]")
+        : (order.line_items || []);
+      return items.reduce((sum, i) => sum + (i.quantity || 0), 0);
+    } catch { return 0; }
+  }
+
   async exportToPDF(orders, filePath) {
     const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 30 });
     const stream = fs.createWriteStream(filePath);
@@ -2760,22 +2830,24 @@ class ExportService {
       "Subject",
       "Email Date",
       "Products",
+      "Qty",
       "BT Type",
+      "BT Route",
       "BT From",
       "BT To",
-      "Billing party",
-      "Picked up",
-      "Delivered",
+      "Billing",
+      "Picked",
+      "Deliv",
       "Billed",
       "Rate",
       "Location"
     ];
-    // A4 Landscape width is 841.89 points. With 30pt margins on left & right, total printable width is 781.89 points.
-    // Sum of colWidths = 50+50+70+55+65+50+55+55+60+35+35+35+35+80 = 730 points.
-    const colWidths = [50, 50, 70, 55, 65, 50, 55, 55, 60, 35, 35, 35, 35, 80];
+    // A4 Landscape width is 841.89 points. With 30pt margins on each side, printable = 781.89 pts.
+    // 16 columns: 48+45+60+52+60+25+48+52+50+50+48+30+30+30+33+70 = 731
+    const colWidths = [45, 45, 55, 45, 100, 20, 45, 50, 48, 48, 45, 30, 30, 30, 33, 62];
     let x = 30;
     headers.forEach((h, i) => {
-      doc.fontSize(9).text(h, x, y, { width: colWidths[i], align: "left" });
+      doc.fontSize(8).text(h, x, y, { width: colWidths[i], align: "left" });
       x += colWidths[i];
     });
     y += 15;
@@ -2783,37 +2855,49 @@ class ExportService {
     y += 5;
 
     for (const order of orders) {
-      if (y > 520) { doc.addPage(); y = 30; }
-      x = 30;
-      
-      const formattedProducts = (order.line_items || [])
-        .map(i => `${i.sku} x${i.quantity}`)
+      const items = typeof order.line_items === "string"
+        ? JSON.parse(order.line_items || "[]")
+        : (order.line_items || []);
+      const formattedProducts = items
+        .map(i => `${i.description || i.sku} x${i.quantity}`)
         .join(", ");
+      const totalQty = items.reduce((sum, i) => sum + (i.quantity || 0), 0);
+      const btRouteType = this._getBtRouteType(order);
 
-      const normalized = getNormalizedOrder(order);
       const values = [
         order.order_number || "",
         order.invoice_number || "",
-        (order.email_subject || "").substring(0, 15),
+        order.email_subject || "",
         order.email_date ? new Date(order.email_date).toLocaleDateString("en-GB") : "",
-        formattedProducts.substring(0, 15),
-        order.bt_type === "branch_transfer" ? "BT Branch Transfer" : (order.bt_type || "").replace(/_/g, " "),
-        normalized.bt_order_type || "",
-        (order.bt_from || "").substring(0, 12),
-        (order.bt_to || "").substring(0, 12),
-        (order.billing_party || "").substring(0, 12),
+        formattedProducts,
+        totalQty > 0 ? String(totalQty) : "",
+        order.bt_type === "branch_transfer" ? "Branch Xfer" : (order.bt_type || "").replace(/_/g, " "),
+        btRouteType,
+        order.bt_from || "",
+        order.bt_to || "",
+        order.billing_party || "",
         order.picked_up ? "Yes" : "No",
         order.delivered ? "Yes" : "No",
         order.billed ? "Yes" : "No",
         order.rate ? `$${order.rate.toFixed(2)}` : "—",
-        (order.location || "").substring(0, 18),
+        order.location || "",
       ];
 
+      doc.fontSize(7);
+      let rowHeight = 12;
       values.forEach((v, i) => {
-        doc.fontSize(8).text(String(v), x, y, { width: colWidths[i], align: "left" });
+        const h = doc.heightOfString(String(v), { width: colWidths[i] });
+        if (h > rowHeight) rowHeight = h;
+      });
+
+      if (y + rowHeight > 520) { doc.addPage(); y = 30; doc.fontSize(7); }
+      
+      x = 30;
+      values.forEach((v, i) => {
+        doc.text(String(v), x, y, { width: colWidths[i], align: "left" });
         x += colWidths[i];
       });
-      y += 12;
+      y += rowHeight + 4;
     }
 
     doc.end();
@@ -2824,23 +2908,31 @@ class ExportService {
   }
 
   async exportToExcel(orders, filePath) {
-    const data = orders.map((o) => ({
-      "Order #": o.order_number || "",
-      "Invoice #": o.invoice_number || "",
-      "Subject": o.email_subject || "",
-      "Email Date": o.email_date ? new Date(o.email_date).toISOString().split("T")[0] : "",
-      "Products": (o.line_items || []).map(i => `${i.sku} x${i.quantity}`).join(", "),
-      "BT Type": o.bt_type === "branch_transfer" ? "BT Branch Transfer" : (o.bt_type || "").replace(/_/g, " "),
-      "BT Route Type": o.bt_order_type || "",
-      "BT From": o.bt_from || "",
-      "BT To": o.bt_to || "",
-      "Billing party": o.billing_party || "",
-      "Picked up": o.picked_up ? "Yes" : "No",
-      "Delivered": o.delivered ? "Yes" : "No",
-      "Billed": o.billed ? "Yes" : "No",
-      "Rate": o.rate || "",
-      "Location": o.location || "",
-    }));
+    const data = orders.map((o) => {
+      const btRouteType = this._getBtRouteType(o);
+      const totalQty = this._getTotalQuantity(o);
+      const items = typeof o.line_items === "string"
+        ? JSON.parse(o.line_items || "[]")
+        : (o.line_items || []);
+      return {
+        "Order #": o.order_number || "",
+        "Invoice #": o.invoice_number || "",
+        "Subject": o.email_subject || "",
+        "Email Date": o.email_date ? new Date(o.email_date).toISOString().split("T")[0] : "",
+        "Products": items.map(i => `${i.description || i.sku} x${i.quantity}`).join(", "),
+        "Quantity": totalQty > 0 ? totalQty : "",
+        "BT Type": o.bt_type === "branch_transfer" ? "BT Branch Transfer" : (o.bt_type || "").replace(/_/g, " "),
+        "BT Route Type": btRouteType,
+        "BT From": o.bt_from || "",
+        "BT To": o.bt_to || "",
+        "Billing party": o.billing_party || "",
+        "Picked up": o.picked_up ? "Yes" : "No",
+        "Delivered": o.delivered ? "Yes" : "No",
+        "Billed": o.billed ? "Yes" : "No",
+        "Rate": o.rate || "",
+        "Location": o.location || "",
+      };
+    });
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Orders");
@@ -2992,6 +3084,9 @@ app.patch("/api/orders/:id/status", async (req, res) => {
     if (req.body.billed) updates.billed_at = new Date();
     notifyField = "billed";
     notifyValue = req.body.billed;
+  }
+  if (req.body.rate !== undefined) {
+    updates.rate = req.body.rate === null || req.body.rate === "" ? null : parseFloat(req.body.rate);
   }
   await order.update(updates);
 
@@ -3245,7 +3340,7 @@ app.get("/api/dashboard", async (req, res) => {
 
 app.get("/api/dashboard/export/pdf", async (req, res) => {
   const { date_from, date_to } = req.query;
-  const where = { type: "branch_transfer" };
+  const where = {};
   if (date_from || date_to) {
     where.createdAt = {};
     if (date_from) where.createdAt[Op.gte] = new Date(date_from);
@@ -3261,7 +3356,7 @@ app.get("/api/dashboard/export/pdf", async (req, res) => {
 
 app.get("/api/dashboard/export/excel", async (req, res) => {
   const { date_from, date_to } = req.query;
-  const where = { type: "branch_transfer" };
+  const where = {};
   if (date_from || date_to) {
     where.createdAt = {};
     if (date_from) where.createdAt[Op.gte] = new Date(date_from);
@@ -3807,10 +3902,10 @@ function startScheduler() {
 
 async function waitForDoclingReady() {
   console.log("[DB] Waiting for Docling service to be ready...");
-  const maxRetries = 90;
+  const maxRetries = 3;
   for (let i = 0; i < maxRetries; i++) {
     try {
-      const res = await axios.get(`${DOCLING_URL}/health`, { timeout: 2000 });
+      const res = await axios.get(`${DOCLING_URL}/health`, { timeout: 3000 });
       if (res.status === 200) {
         console.log("[DB] Docling service is ready!");
         return true;

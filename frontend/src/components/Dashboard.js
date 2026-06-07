@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import API from "../services/api";
 import { format } from "date-fns";
-import { Search, Download, RefreshCw, FileText, Eye, CheckCircle, Circle, ArrowUpRight, TrendingUp, Upload, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
+import { Search, Download, RefreshCw, FileText, Eye, CheckCircle, Circle, ArrowUpRight, TrendingUp, Upload, ChevronLeft, ChevronRight, Trash2, DollarSign, Check, X, Edit2 } from "lucide-react";
 
 export default function Dashboard({ onSelectOrder }) {
   const [orders, setOrders] = useState([]);
@@ -14,6 +14,9 @@ export default function Dashboard({ onSelectOrder }) {
   const [scanning, setScanning] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [metrics, setMetrics] = useState({ total: 0, pickedUp: 0, delivered: 0, pending: 0 });
+  const [editingRateId, setEditingRateId] = useState(null);
+  const [editingRateValue, setEditingRateValue] = useState("");
+  const rateInputRef = useRef(null);
 
   // Reload when filters change (debounced)
   useEffect(() => {
@@ -121,6 +124,42 @@ export default function Dashboard({ onSelectOrder }) {
       loadMetrics();
     } catch (err) {
       alert("Delete failed: " + err.message);
+    }
+  };
+
+  const handleRateEdit = (e, order) => {
+    e.stopPropagation();
+    setEditingRateId(order.id);
+    setEditingRateValue(order.rate != null ? order.rate.toFixed(2) : "");
+    setTimeout(() => rateInputRef.current?.focus(), 50);
+  };
+
+  const handleRateSave = async (e, orderId) => {
+    if (e) e.stopPropagation();
+    try {
+      const val = editingRateValue.trim();
+      await API.patch(`/orders/${encodeURIComponent(encodeURIComponent(orderId))}/status`, {
+        rate: val === "" ? null : parseFloat(val)
+      });
+      setEditingRateId(null);
+      await loadOrders(pagination.page);
+    } catch (err) {
+      alert("Failed to update rate: " + err.message);
+    }
+  };
+
+  const handleRateCancel = (e) => {
+    if (e) e.stopPropagation();
+    setEditingRateId(null);
+    setEditingRateValue("");
+  };
+
+  const handleRateKeyDown = (e, orderId) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleRateSave(e, orderId);
+    } else if (e.key === "Escape") {
+      handleRateCancel(e);
     }
   };
 
@@ -336,8 +375,47 @@ export default function Dashboard({ onSelectOrder }) {
                       )}
                     </td>
                     
-                    <td className="px-4 py-3.5 font-semibold text-emerald-400 font-mono text-xs">
-                      {order.rate ? `$${order.rate.toFixed(2)}` : "—"}
+                    <td className="px-4 py-3.5 font-mono text-xs" onClick={(e) => e.stopPropagation()}>
+                      {editingRateId === order.id ? (
+                        <div className="flex items-center gap-1">
+                          <span className="text-emerald-400">$</span>
+                          <input
+                            ref={rateInputRef}
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            className="w-20 bg-slate-800 border border-emerald-500/50 rounded-lg px-2 py-1 text-emerald-300 text-xs font-mono outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400/30 transition-all"
+                            value={editingRateValue}
+                            onChange={(e) => setEditingRateValue(e.target.value)}
+                            onKeyDown={(e) => handleRateKeyDown(e, order.id)}
+                            onBlur={() => setTimeout(() => { if (editingRateId === order.id) handleRateCancel(); }, 200)}
+                            placeholder="0.00"
+                          />
+                          <button
+                            onClick={(e) => handleRateSave(e, order.id)}
+                            className="text-emerald-400 hover:text-emerald-300 p-0.5 rounded transition-colors"
+                            title="Save (Enter)"
+                          >
+                            <Check size={13} />
+                          </button>
+                          <button
+                            onClick={handleRateCancel}
+                            className="text-slate-500 hover:text-red-400 p-0.5 rounded transition-colors"
+                            title="Cancel (Esc)"
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={(e) => handleRateEdit(e, order)}
+                          className="group/rate flex items-center gap-1 font-semibold text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
+                          title="Click to edit rate"
+                        >
+                          {order.rate != null ? `$${order.rate.toFixed(2)}` : "—"}
+                          <Edit2 size={12} className="text-slate-600 group-hover/rate:text-emerald-400/60 transition-colors" />
+                        </button>
+                      )}
                     </td>
                     <td className="px-4 py-3.5 max-w-[140px] truncate text-slate-400 text-xs" title={order.destination}>
                       {order.destination || "Not identified"}
