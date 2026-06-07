@@ -72,6 +72,7 @@ class DoclingParser:
         if DOCLING_AVAILABLE:
             pipeline_options = PdfPipelineOptions()
             pipeline_options.do_table_structure = True
+            pipeline_options.do_ocr = True
             self.converter = DocumentConverter(
                 format_options={
                     InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
@@ -391,16 +392,28 @@ class DoclingParser:
             if lines_before:
                 # Avoid picking up header junk if it's the very first loop
                 potential_product = lines_before[-1]
-                if not "Supplier Invoice" in potential_product: 
+                if not "Supplier Invoice" in potential_product and not "Response From" in potential_product: 
                     product_name = potential_product
                 else:
-                    product_name = "Unknown Product"
+                    # Look AFTER "Accepted"
+                    lines_after = [line.strip() for line in quantity_chunk.split('\n') if line.strip() and not line.startswith('<!--')]
+                    if lines_after:
+                        product_name = lines_after[0]
+                    else:
+                        product_name = "Unknown Product"
             else:
-                product_name = "Unknown Product"
+                lines_after = [line.strip() for line in quantity_chunk.split('\n') if line.strip() and not line.startswith('<!--')]
+                product_name = lines_after[0] if lines_after else "Unknown Product"
                 
-            # Quantity: Search for Delivered Qty AFTER "Accepted"
-            qty_match = re.search(r"(?:Delv Qty|Delivered qty|Del qty)[:\s]*(\d+)", quantity_chunk, re.IGNORECASE)
-            quantity = int(qty_match.group(1)) if qty_match else 0
+            # Quantity: Search for Delivered Qty or RES: AFTER "Accepted"
+            qty_match = re.search(r"(?:Delv Qty|Delivered qty|Del qty)[:\s]*(\d+)|(\d+)\s*(?:Delv Qty|Delivered qty|Del qty)|RES:?\s*(\d+)", quantity_chunk, re.IGNORECASE)
+            quantity = 0
+            if qty_match:
+                q_str = qty_match.group(1) or qty_match.group(2) or qty_match.group(3)
+                try:
+                    quantity = int(q_str)
+                except ValueError:
+                    pass
             
             # Only append if we found a valid quantity (prevents empty trailing chunks from adding junk)
             if quantity > 0:

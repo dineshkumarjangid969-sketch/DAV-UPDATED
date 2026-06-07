@@ -1,36 +1,71 @@
+const fs = require('fs');
 const { normalizeOrderExtraction } = require('./server.js');
-const { Sequelize, DataTypes } = require('sequelize');
 
-const sequelize = new Sequelize({
-  dialect: 'sqlite',
-  storage: 'dav_transport.db',
-  logging: false
-});
+const rawMarkdown = `
+<!-- image -->
 
-const Order = sequelize.define('Order', {
-  id: { type: DataTypes.STRING(50), primaryKey: true },
-  email_subject: { type: DataTypes.STRING },
-  raw_email_body: { type: DataTypes.TEXT },
-  docling_data: { type: DataTypes.TEXT }
-}, { tableName: 'orders', timestamps: true });
+<!-- image -->
 
-(async () => {
-  try {
-    const o = await Order.findByPk('BT_Albany_20260604_1316');
-    if (o) {
-      const doclings = o.docling_data ? JSON.parse(o.docling_data) : [];
-      const res = normalizeOrderExtraction(o.email_subject, "unknown@email.com", o.raw_email_body, "", doclings);
-      console.log('--- Order ---');
-      console.log('Subject:', o.email_subject);
-      console.log('Order No:', res.order_number);
-      console.log('Invoice No:', res.invoice_number);
-      console.log('Products:', JSON.stringify(res.products, null, 2));
-      console.log('ComingFrom:', res.comingFrom);
-      console.log('Destination:', res.destination);
-    }
-  } catch(e) {
-    console.error(e);
-  } finally {
-    process.exit(0);
-  }
-})();
+<!-- image -->
+
+<!-- image -->
+
+<!-- image -->
+
+<!-- image -->
+
+TAPE CONTENTS 04/06/202610:39:08
+
+40907
+
+P/O Response 264405
+
+Version:1
+
+POR Status:Accepted
+
+Response From:1507 KEVIN
+
+HN FURNITURE WAIRAU PARK
+
+Supplier Invoice: 5214306
+
+GAUCHO 1E FAB BLK
+
+Accepted
+
+CBGCORECEFBBLK
+
+ORD:1@
+
+TOT:
+
+RES:1@
+
+TOT:
+
+Back Ord:1
+
+Est.Ship:
+
+Order
+
+Response
+
+Total Ex.GST
+
+Total Incl.GST
+
+End of Report
+
+<!-- image -->
+`;
+
+const doclings = [{
+  raw_markdown: rawMarkdown,
+  raw_tables: [],
+  line_items: [] // assuming docling line items failed, testing the new logic
+}];
+
+const res = normalizeOrderExtraction("", "", "", "", doclings);
+console.log(JSON.stringify(res.products, null, 2));
