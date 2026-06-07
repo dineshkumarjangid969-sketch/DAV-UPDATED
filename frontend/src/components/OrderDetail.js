@@ -33,7 +33,7 @@ export default function OrderDetail({ order, onBack }) {
     if (!pathStr) return "";
     const parts = pathStr.split(/[/\\]/);
     const filename = parts[parts.length - 1];
-    return `http://localhost:5000/uploads/${filename}`;
+    return `http://${window.location.hostname}:5000/uploads/${filename}`;
   };
 
   return (

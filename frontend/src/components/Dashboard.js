@@ -95,11 +95,11 @@ export default function Dashboard({ onSelectOrder }) {
   };
 
   const handleExportPDF = () => {
-    window.open("http://localhost:5000/api/dashboard/export/pdf", "_blank");
+    window.open(`http://${window.location.hostname}:5000/api/dashboard/export/pdf`, "_blank");
   };
 
   const handleExportExcel = () => {
-    window.open("http://localhost:5000/api/dashboard/export/excel", "_blank");
+    window.open(`http://${window.location.hostname}:5000/api/dashboard/export/excel`, "_blank");
   };
 
   const handleStatusToggle = async (order, field) => {
