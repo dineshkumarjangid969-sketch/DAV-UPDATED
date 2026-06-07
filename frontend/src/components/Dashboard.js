@@ -97,12 +97,40 @@ export default function Dashboard({ onSelectOrder }) {
     }
   };
 
-  const handleExportPDF = () => {
-    window.open(`http://${window.location.hostname}:5000/api/dashboard/export/pdf`, "_blank");
+  const handleExportPDF = async () => {
+    try {
+      const res = await fetch(`http://${window.location.hostname}:5000/api/dashboard/export/pdf`);
+      if (!res.ok) throw new Error("Failed to export PDF");
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `orders_report_${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (e) {
+      alert(e.message);
+    }
   };
 
-  const handleExportExcel = () => {
-    window.open(`http://${window.location.hostname}:5000/api/dashboard/export/excel`, "_blank");
+  const handleExportExcel = async () => {
+    try {
+      const res = await fetch(`http://${window.location.hostname}:5000/api/dashboard/export/excel`);
+      if (!res.ok) throw new Error("Failed to export Excel");
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `orders_report_${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (e) {
+      alert(e.message);
+    }
   };
 
   const handleStatusToggle = async (order, field) => {
