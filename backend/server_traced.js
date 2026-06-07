@@ -688,54 +688,22 @@ function extractRoute(combinedContent) {
   const headersRoute = extractStoresFromHeaders(combinedContent);
   if (headersRoute) return headersRoute;
   
-  // 1.2 Explicit phrases like "collect from X" or "deliver to Y" or "from X to Y"
-  const directionalPattern = /(?:(?:pickup|collect|from)\s+from\s+)?(?:(?:harvey norman|hn|the warehouse|tw)\s+)?(Pukekohe|Albany|Wairau\s+Park|Westgate|Lower\s+Hutt|Hamilton|Palmerston\s+North|Whangarei|Whanganui|Hastings|Whakatane|Mt\s+Wellington|Manukau|Porirua|New\s+Plymouth|Henderson)(?:\s+store|\s+warehouse|,\s+please)?\s+(?:and\s+)?(?:to\s+deliver\s+to\s+|to\s+|deliver\s+to\s+)(?:and\s+)?(?:(?:harvey norman|hn|the warehouse|tw)\s+)?(Pukekohe|Albany|Wairau\s+Park|Westgate|Lower\s+Hutt|Hamilton|Palmerston\s+North|Whangarei|Whanganui|Hastings|Whakatane|Mt\s+Wellington|Manukau|Porirua|New\s+Plymouth|Henderson)/i;
-  const dirMatch = combinedContent.match(directionalPattern);
-  if (dirMatch) {
-    const comingFrom = matchStore(dirMatch[1]);
-    const destination = matchStore(dirMatch[2]);
-    if (comingFrom || destination) {
-      return { comingFrom, destination };
-    }
-  }
-
   return null;
 }
 
-function truncateTo6Digits(val) {
-  if (!val || val === "Not identified") return val;
-  const cleaned = val.replace(/\D/g, '');
-  if (cleaned.length >= 6) {
-    const digitsMatch = cleaned.match(/\d{6}$/);
-    if (digitsMatch) return digitsMatch[0];
-  }
-  return val;
-}
-
 function extractInvoiceNo(combinedContent) {
-  // 0. Try P/O Response format (BT2) for Invoice - "Supplier Invoice: XXXXXX" (green color in PDF)
-  const bt2InvMatch = combinedContent.match(/Supplier\s+Invoice[:\s]*([0-9]+)/i);
-  if (bt2InvMatch && bt2InvMatch[1]) {
-    return bt2InvMatch[1];
-  }
-
   // First try high-priority Harvey Norman order formats (e.g. PONZ0220000341874, NZ0220000341874, NZ-022-3831432)
   const hnPattern = /(?:PONZ|SONZ|NZ|PO|SO|Invoice|Inv|Order|PO#|SO#)[:\s#\-_]*([A-Z0-9]*NZ[\d\-]{5,})/gi;
   let hnMatch;
   while ((hnMatch = hnPattern.exec(combinedContent)) !== null) {
     const val = hnMatch[1].trim();
-    if (val.length >= 5) {
-      const digitsMatch = val.replace(/\D/g, '').match(/\d{6}$/);
-      return digitsMatch ? digitsMatch[0] : val;
-    }
+    if (val.length >= 5) return val;
   }
   
   const simpleHnPattern = /\b(NZ[\d\-]{5,})\b/gi;
   let simpleHnMatch;
   while ((simpleHnMatch = simpleHnPattern.exec(combinedContent)) !== null) {
-    const val = simpleHnMatch[1].trim();
-    const digitsMatch = val.replace(/\D/g, '').match(/\d{6}$/);
-    return digitsMatch ? digitsMatch[0] : val;
+    return simpleHnMatch[1].trim();
   }
 
   // Regexes with optional middle modifiers (reprint, copy, status, date, no, number)
@@ -743,7 +711,7 @@ function extractInvoiceNo(combinedContent) {
     /\b(?:INV|INVOICE|PO|SO|Order|Ref|Transaction)\b(?:\s+(?:reprint|copy|duplicate|original|status|date|no|number|tax|invoice|report|purchase|sales|re-print))*[:\s#\-_]+([A-Z0-9\-_\/]+)/gi
   ];
   
-  const blacklist = /^(box|po|and|to|for|the|from|with|status|subject|date|page|image|attached|please|ready|collect|collecting|accepted|pending|scan|scanned|attached|find|re|reprint|re-print|copy|duplicate|original|invoice|order|draft|statement|report|pos|paid|unpaid|cancelled|yes|no|nil|null|none|details|transaction|type|cash|sale|assistant|operator|location|phone|receipt)$/i;
+  const blacklist = /^(and|to|for|the|from|with|status|subject|date|page|image|attached|please|ready|collect|collecting|accepted|pending|scan|scanned|attached|find|re|reprint|re-print|copy|duplicate|original|invoice|order|draft|statement|report|pos|paid|unpaid|cancelled|yes|no|nil|null|none|details|transaction|type|cash|sale|assistant|operator|location|phone|receipt)$/i;
 
   for (const pat of patterns) {
     let match;
@@ -755,57 +723,17 @@ function extractInvoiceNo(combinedContent) {
       }
     }
   }
-
+  
   // Try pattern for other invoice numbers (like 7 digit numbers or similar)
   const numericInvoice = combinedContent.match(/\b(2\d{6})\b/);
   if (numericInvoice) {
     return numericInvoice[1];
   }
-
-  return "Not identified";
-}
-    // Sum of colWidths = 50+50+70+55+65+50+55+55+55+35+35+35+35+80 = 735 points.
-function extractOrderNo(combinedContent) {
-  // 0. Try P/O Response format (BT2) for Order - "P/O Response [ORDER NUMBER]" (blue color in PDF)
-  const bt2OrdMatch = combinedContent.match(/P\/O\s+Response[:\s]*([0-9]+)/i);
-  if (bt2OrdMatch && bt2OrdMatch[1]) {
-    return bt2OrdMatch[1];
-  }
-
-  // Look for Sales Order in markdown format
-  const salesOrderMatch = combinedContent.match(/Sales\s*Order:?\s*\n?\s*([0-9\/\s]{5,})/i);
-  if (salesOrderMatch) {
-    return salesOrderMatch[1].replace(/\s+/g, "").trim();
-  }
   
-  // High priority Harvey Norman formats
-  const hnPattern = /(?:SONZ|Order|SO#)[:\s#\-_]*([A-Z0-9]*NZ[\d\-]{5,})/gi;
-  let hnMatch;
-  while ((hnMatch = hnPattern.exec(combinedContent)) !== null) {
-    const val = hnMatch[1].trim();
-    if (val.length >= 5) {
-      const digitsMatch = val.replace(/\D/g, '').match(/\d{6}$/);
-      return digitsMatch ? digitsMatch[0] : val;
-    }
-  }
   return "Not identified";
 }
 
 function extractComingFrom(combinedContent) {
-  // 0. Try BT1 specific pattern - "trading as Harvey Norman [STORE NAME]" (yellow color in PDF)
-  const btSourceMatch = combinedContent.match(/trading\s+as\s+Harvey\s+Norman(?:\s+Furniture)?[:\s]*([a-zA-Z ]+?)(?:\n|\.|,|Store|Showroom|$)/i);
-  if (btSourceMatch && btSourceMatch[1]) {
-    const matched = matchStore(btSourceMatch[1].trim());
-    if (matched) return matched;
-  }
-
-  // 0.1 Try P/O Response format (BT2) for Source - "Response From: [STORE NAME]" (yellow color in PDF)
-  const bt2SourceMatch = combinedContent.match(/Response From:[^\n]*\n(?:HN FURNITURE\s*)?([A-Za-z ]+)/i);
-  if (bt2SourceMatch && bt2SourceMatch[1]) {
-    const matched = matchStore(bt2SourceMatch[1].trim());
-    if (matched) return matched;
-  }
-
   // 1. Try route extraction
   const route = extractRoute(combinedContent);
   if (route) return route.fromStore;
@@ -856,20 +784,6 @@ function extractPickupLocation(text) {
 }
 
 function extractDestination(combinedContent) {
-  // 0. Try BT1 specific pattern - destination in green color area, usually city name followed by postcode
-  const bt1DestMatch = combinedContent.match(/^([A-Za-z ]+?)\s+(\d{4})\s+/m);
-  if (bt1DestMatch && bt1DestMatch[1]) {
-    const matched = matchStore(bt1DestMatch[1].trim());
-    if (matched) return matched;
-  }
-
-  // 0.1 Try BT2 specific pattern - destination in email body or signature address
-  const bt2DestMatch = combinedContent.match(/(?:Deliver\s+To|Destination|To Store|Delivery\s+Address)[:\s]*([A-Za-z ]+?)(?:\n|\.|,|$)/i);
-  if (bt2DestMatch && bt2DestMatch[1]) {
-    const matched = matchStore(bt2DestMatch[1].trim());
-    if (matched) return matched;
-  }
-
   // 1. Try route extraction
   const route = extractRoute(combinedContent);
   if (route) return route.toStore;
@@ -945,13 +859,6 @@ function extractProducts(body, rawTables, rawMarkdown, doclingLineItems) {
     products.push({ sku, quantity: parseInt(quantity, 10) || 1, description });
   }
   
-  // ─── Strategy 0.5: BT2 Specific extraction ───
-  const combinedForProducts = (body || "") + "\n" + (rawMarkdown || "");
-  const bt2ProductMatch = combinedForProducts.match(/\n\n([A-Z0-9\s]+?)\s+Accepted\s*\n\s*([A-Z0-9\-_]+)\s*\n[\s\S]*?Delv Qty:\s*(\d+)/i);
-  if (bt2ProductMatch) {
-    addProduct(bt2ProductMatch[2], parseInt(bt2ProductMatch[3], 10), bt2ProductMatch[1]);
-  }
-
   // ─── Strategy 0: Accept Docling's own line_items if present ───
   if (doclingLineItems && Array.isArray(doclingLineItems) && doclingLineItems.length > 0) {
     for (const item of doclingLineItems) {
@@ -979,41 +886,6 @@ function extractProducts(body, rawTables, rawMarkdown, doclingLineItems) {
           let qtyStr = qtyIdx >= 0 && qtyIdx < row.length ? String(row[qtyIdx] || "").trim() : "1";
           addProduct(sku, parseInt(qtyStr.replace(/[^\d]/g, ""), 10), desc || sku);
         }
-      }
-    }
-  }
-
-  // ─── Strategy 1.5: Markdown table extraction ───
-  if (rawMarkdown) {
-    const lines = rawMarkdown.split('\n');
-    let inTable = false;
-    let headers = [];
-    let skuIdx = -1, descIdx = -1, qtyIdx = -1;
-    
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (trimmed.startsWith('|')) {
-        const cols = trimmed.split('|').slice(1, -1).map(c => c.trim());
-        if (cols.length < 2) continue;
-        
-        if (!inTable) {
-          headers = cols.map(h => h.toLowerCase());
-          skuIdx = headers.findIndex(h => ["sku", "code", "product code"].some(k => h === k || h.includes(k)));
-          descIdx = headers.findIndex((h, i) => i !== skuIdx && ["items", "description", "item name", "product name"].some(k => h.includes(k)));
-          qtyIdx = headers.findIndex(h => ["qty", "quantity"].some(k => h.includes(k)));
-          if (skuIdx >= 0 || descIdx >= 0) {
-            inTable = true;
-          }
-        } else if (cols[0].includes('---')) {
-          continue; // Divider
-        } else {
-          let sku = skuIdx >= 0 && skuIdx < cols.length ? cols[skuIdx] : "";
-          let desc = descIdx >= 0 && descIdx < cols.length ? cols[descIdx] : "";
-          let qtyStr = qtyIdx >= 0 && qtyIdx < cols.length ? cols[qtyIdx] : "1";
-          addProduct(sku, parseInt(qtyStr.replace(/[^\d]/g, ""), 10), desc || sku);
-        }
-      } else {
-        inTable = false;
       }
     }
   }
@@ -1239,7 +1111,7 @@ function extractDeliveryStart(combinedContent) {
 
 function extractStoreFromOrderNumber(text) {
   if (!text) return null;
-  const orderNumRegex = /(?:NZ|PONZ|SONZ|PO|SO)[-_#\s\/]*(0\d{2}|\d{2,3})[-\d\/]{5,}/i;
+  const orderNumRegex = /(?:NZ|PONZ|SONZ|PO|SO)?[-_#\s\/]*(0\d{2}|\d{2,3})[-\d\/]{5,}/i;
   const match = text.match(orderNumRegex);
   if (match) {
     const num = parseInt(match[1], 10).toString();
@@ -1314,37 +1186,10 @@ function extractRouteFromContent(subject, fromAddress, bodyText, attachmentsText
   const prefixPattern = '(?:hn\\s+|harvey\\s+norman\\s+|tw\\s+|the\\s+warehouse\\s+)?';
   const transitionRegex = new RegExp(`(?:${prefixPattern})(${storePatternStr})\\s*(?:store|branch|warehouse|whouse|wh|showrooms?)?\\s*(?:to|2|->|\\-|\\/)\\s*(?:the\\s+)?(?:${prefixPattern})(${storePatternStr})`, 'i');
   
-  const btRouteRegex = new RegExp(`(?:bt\s*\d*|branch\s+transfer|goods\s+movement|offsite\s+to\s+showroom)\s*(?:[:\-–—\s]*)?(?:from\s+)?(${storePatternStr})\s*(?:to|→|\-|\/|2)\s*(${storePatternStr})`, 'i');
   const matchTransition = cleanCombinedText.match(transitionRegex);
   if (matchTransition) {
-    comingFrom = storeMap[matchTransition[1].trim()];
+    console.log(\'transition set\'); comingFrom = storeMap[matchTransition[1].trim()];
     destination = storeMap[matchTransition[2].trim()];
-  }
-
-  const btRouteMatch = cleanCombinedText.match(btRouteRegex);
-  if (btRouteMatch) {
-    comingFrom = storeMap[btRouteMatch[1].trim()] || comingFrom;
-    destination = storeMap[btRouteMatch[2].trim()] || destination;
-  }
-
-  // 1.1 Explicit phrases like "collect from X" or "deliver to Y" or "from X to Y"
-  const directionalPattern = /(?:(?:pickup|collect|from)\s+from\s+)?(?:(?:harvey norman|hn|the warehouse|tw)\s+)?(Pukekohe|Albany|Wairau\s+Park|Westgate|Lower\s+Hutt|Hamilton|Palmerston\s+North|Whangarei|Whanganui|Hastings|Whakatane|Mt\s+Wellington|Manukau|Porirua|New\s+Plymouth|Henderson)(?:\s+store|\s+warehouse|,\s+please)?\s+(?:and\s+)?(?:to\s+deliver\s+to\s+|to\s+|deliver\s+to\s+)(?:and\s+)?(?:(?:harvey norman|hn|the warehouse|tw)\s+)?(Pukekohe|Albany|Wairau\s+Park|Westgate|Lower\s+Hutt|Hamilton|Palmerston\s+North|Whangarei|Whanganui|Hastings|Whakatane|Mt\s+Wellington|Manukau|Porirua|New\s+Plymouth|Henderson)/i;
-  const dirMatch = cleanCombinedText.match(directionalPattern);
-  if (dirMatch) {
-    if (!comingFrom) comingFrom = matchStore(dirMatch[1]);
-    if (!destination) destination = matchStore(dirMatch[2]);
-  }
-
-  // 1.2 Try explicit directional phrases
-  const explicitStores = findAllStoresInText(combinedText);
-  for (const store of explicitStores) {
-    const storePattern = store.toLowerCase().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-    if (!comingFrom && new RegExp(`(?:from|pickup|pick up|collect|collection at)\\s+(?:this\\s+bt\\s+)?(?:the\\s+)?(?:harvey norman\\s+|hn\\s+)?${storePattern}`, 'i').test(cleanCombinedText)) {
-      comingFrom = store;
-    }
-    if (!destination && new RegExp(`(?:and\\s+)?(?:to|deliver to|delivery to|dest|drop|drop off at|drop at|drop to)\\s+(?:the\\s+)?(?:harvey norman\\s+|hn\\s+)?${storePattern}`, 'i').test(cleanCombinedText)) {
-      destination = store;
-    }
   }
 
   // 1.5 Try explicit layout patterns
@@ -1373,7 +1218,7 @@ function extractRouteFromContent(subject, fromAddress, bodyText, attachmentsText
   if (!comingFrom) {
     const fromMatch = cleanSubject.match(new RegExp(`(?:bt|transfer)\\s+from\\s+(${storePatternStr})`, 'i'));
     if (fromMatch) {
-      comingFrom = storeMap[fromMatch[1].trim()];
+      console.log(\'transition set\'); comingFrom = storeMap[fromMatch[1].trim()];
     }
   }
   if (!destination) {
@@ -1465,38 +1310,23 @@ function extractRouteFromContent(subject, fromAddress, bodyText, attachmentsText
     }
   }
 
-  // 7. Multi-store fallback rule
+  // 7. Single-store mention / Return to store rule
   if ((!comingFrom || comingFrom === "Not identified") && (!destination || destination === "Not identified")) {
     const allFound = findAllStoresInText(combinedText);
-    if (allFound.length > 0) {
+    const uniqueStore = allFound.length === 1 ? allFound[0] : (requesterStore || null);
+    
+    if (uniqueStore && uniqueStore !== "13 Ha Crescent, Harvey Norman Warehouse") {
       const isReturn = /return\s+to\s+store|rts\b/i.test(cleanCombinedText);
-      if (allFound.length === 1) {
-        const uniqueStore = allFound[0];
-        if (uniqueStore !== "13 Ha Crescent, Harvey Norman Warehouse") {
-          comingFrom = isReturn ? "Not identified" : uniqueStore;
-          destination = isReturn ? uniqueStore : "Not identified";
-        }
+      if (isReturn) {
+        comingFrom = "Not identified";
+        destination = uniqueStore;
       } else {
-        // We have multiple stores, try to assign them sensibly
-        // First, check explicit "from store" or "to store" phrases
-        for (const store of allFound) {
-          const storePattern = store.toLowerCase().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-          if (new RegExp(`(?:from|collection at)\\s+(?:this\\s+bt\\s+)?(?:the\\s+)?(?:harvey norman\\s+|hn\\s+)?${storePattern}`, 'i').test(cleanCombinedText)) {
-            comingFrom = store;
-          }
-          if (new RegExp(`(?:to|delivery to|dest)\\s+(?:the\\s+)?(?:harvey norman\\s+|hn\\s+)?${storePattern}`, 'i').test(cleanCombinedText)) {
-            destination = store;
-          }
-        }
-        
-        // If still missing, just pick the first two
-        if (!comingFrom) comingFrom = allFound[0];
-        if (!destination) {
-          destination = allFound.find(s => s !== comingFrom) || "Not identified";
-        }
+        comingFrom = uniqueStore;
+        destination = "Not identified";
       }
     }
   }
+  
   // 8. Zero-Distance Loop Check
   if (comingFrom && destination && comingFrom !== "Not identified" && destination !== "Not identified" && comingFrom === destination) {
     const isReturn = /return\s+to\s+store|rts\b/i.test(cleanCombinedText);
@@ -1507,38 +1337,10 @@ function extractRouteFromContent(subject, fromAddress, bodyText, attachmentsText
     }
   }
   
-  const addressMatch = cleanCombinedText.match(/## SHIPPING ADDRESS[\s\n]+([^\n]+)/i);
-  const deliveryAddress = addressMatch && addressMatch[1] ? addressMatch[1].trim() : (destination || "Not identified");
-
   return {
     comingFrom: comingFrom || "Not identified",
-    destination: destination || "Not identified",
-    deliveryAddress
+    destination: destination || "Not identified"
   };
-}
-
-function getBTRegion(storeName) {
-  if (!storeName) return null;
-  const store = STORE_REGISTRY[storeName];
-  if (store && store.region) {
-    const region = store.region.toLowerCase();
-    if (region === "auckland") return "Within Auckland";
-    return "Out of Auckland";
-  }
-  const normalized = storeName.toLowerCase();
-  if (normalized.includes("auckland")) return "Within Auckland";
-  return "Out of Auckland";
-}
-
-function getBTOrderType(fromStore, toStore) {
-  const fromRegion = getBTRegion(fromStore);
-  const toRegion = getBTRegion(toStore);
-  // Simplified rule: route type depends only on within vs outside Auckland
-  if (fromRegion === "Within Auckland" && toRegion === "Within Auckland") return "Local";
-  if (fromRegion === "Within Auckland" && toRegion === "Out of Auckland") return "Line-Haul + Local";
-  if (fromRegion === "Out of Auckland" && toRegion === "Within Auckland") return "Line-Haul + Local";
-  if (fromRegion === "Out of Auckland" && toRegion === "Out of Auckland") return "Line-Haul";
-  return "Not identified";
 }
 
 function normalizeOrderExtraction(subject, from, body, html, doclings) {
@@ -1547,8 +1349,6 @@ function normalizeOrderExtraction(subject, from, body, html, doclings) {
   let attachmentsText = "";
   let rawTables = [];
   let doclingLineItems = [];
-  let doclingDocumentType = null;
-  let doclingBTType = null;
   if (doclings && Array.isArray(doclings)) {
     for (const doc of doclings) {
       if (doc.raw_markdown) {
@@ -1560,24 +1360,20 @@ function normalizeOrderExtraction(subject, from, body, html, doclings) {
       if (doc.line_items && Array.isArray(doc.line_items) && doc.line_items.length > 0) {
         doclingLineItems = doclingLineItems.concat(doc.line_items);
       }
-      if (doc.document_type) {
-        doclingDocumentType = doc.document_type;
-      }
-      if (doc.bt_type) {
-        doclingBTType = doc.bt_type;
-      }
     }
   }
   
   // Combine only the current document's text and email body
-  // Normalize the combined content to remove multiple spaces and newlines
-  const combinedContent = (subject + " " + emailBodyText + " " + attachmentsText).replace(/\s+/g, ' ');
-  const cleanCombinedText = combinedContent.replace(/[^a-zA-Z0-9\s]/g, " ");
-
-  // Extract invoice and order numbers WITHOUT truncating yet - handle BT1 vs BT2 formats
+  const combinedContent = [
+    `Subject: ${subject || ""}`,
+    `From: ${from || ""}`,
+    `Body: ${body || ""}`,
+    `HTML: ${htmlToText(html)}`,
+    `Attachments Text: ${attachmentsText}`,
+    `Attachments Tables: ${formatDoclingTables(rawTables)}`
+  ].join("\n");
+  
   const invoiceNo = extractInvoiceNo(combinedContent);
-  const orderNo = extractOrderNo(combinedContent);
-
   const route = extractRouteFromContent(subject, from, emailBodyText, attachmentsText);
   let comingFrom = route.comingFrom;
   let destination = route.destination;
@@ -1587,66 +1383,20 @@ function normalizeOrderExtraction(subject, from, body, html, doclings) {
       if (!comingFrom || comingFrom === "Not identified") comingFrom = "Westgate";
       if (!destination || destination === "Not identified") destination = "Manukau";
   }
+  
   const products = extractProducts(emailBodyText, rawTables, attachmentsText, doclingLineItems);
   const billTo = extractBillTo(combinedContent, destination);
-
-  const isBranchTransferText = /(?:\b(?:bt(?:\s*\d+)?|branch transfer|goods movement|offsite to showroom|bt from|return to store)\b)/i.test(combinedContent) ||
-                              doclingDocumentType === "branch_transfer" ||
-                              doclingDocumentType === "return_to_store" ||
-                              doclingBTType === "branch_transfer" ||
-                              doclingBTType === "return_to_store";
-  const isReturnToStoreText = /(?:return\s+to\s+store|return\s+to\s+showroom|return\s+to\s+warehouse|rts\b)/i.test(cleanCombinedText);
-  const isCustomerDelivery = !isBranchTransferText &&
-                             ((billTo && billTo.toLowerCase().includes("customer")) ||
-                              /(?:customer\s+will\s+collect|deliver\s+to\s+customer|delivery\s+to\s+customer|customer\s+delivery)/i.test(combinedContent));
-
-  if (isCustomerDelivery) {
-    if ((!comingFrom || comingFrom === "Not identified") && destination && destination !== "Not identified") {
-      comingFrom = destination;
-    }
-    destination = "Customer";
-  }
-
-  // Final safeguard: if still missing a source, use the only store found in the email
-  if (!comingFrom || comingFrom === "Not identified") {
-    const allFoundFinal = findAllStoresInText(combinedContent);
-    if (allFoundFinal.length === 1 && allFoundFinal[0] !== "13 Ha Crescent, Harvey Norman Warehouse") {
-      if (destination === "Not identified" || destination !== allFoundFinal[0]) {
-        comingFrom = allFoundFinal[0];
-      }
-    }
-  }
-
   const deliveryStart = extractDeliveryStart(combinedContent);
   const deliveryStops = destination && destination !== "Not identified" ? [destination] : [];
-  const normalizedType = doclingDocumentType === "purchase_order" || doclingBTType === "purchase_order"
-    ? "branch_transfer"
-    : isReturnToStoreText || isBranchTransferText
-      ? "branch_transfer"
-      : "customer_delivery";
-  const normalizedBTType = doclingBTType === "purchase_order" || doclingDocumentType === "purchase_order"
-    ? "purchase_order"
-    : isReturnToStoreText
-      ? "return_to_store"
-      : isBranchTransferText
-        ? "branch_transfer"
-        : "customer_delivery";
-  const normalizedBTOrderType = normalizedType === "branch_transfer"
-    ? getBTOrderType(comingFrom, destination)
-    : normalizedBTType.replace(/_/g, " ");
-
+  
   const normalized = {
-    invoiceNo: truncateTo6Digits(invoiceNo),
-    orderNo: truncateTo6Digits(orderNo) || truncateTo6Digits(invoiceNo),
+    invoiceNo,
     comingFrom,
     destination,
     products,
     billTo,
     deliveryStart,
     deliveryStops,
-    type: normalizedType,
-    btType: normalizedBTType,
-    btOrderType: normalizedBTOrderType,
     sourceEmailSubject: subject || "Not identified",
     sourceEmailBody: body || "Not identified",
     sourceAttachments: doclings ? doclings.map(d => d.filename || "Attachment") : []
@@ -1662,14 +1412,10 @@ function getNormalizedOrder(order) {
   let normalized = json.normalized_data || {};
   
   const invoiceNo = normalized.invoiceNo || json.invoice_number || json.order_number || "Not identified";
-  const orderNo = normalized.orderNo || json.order_number || json.invoice_number || "Not identified";
   const comingFrom = normalized.comingFrom || json.bt_from || json.pickup_store || "Not identified";
   const destination = normalized.destination || json.bt_to || json.destination_store || json.destination_address || json.location || "Not identified";
   const products = normalized.products || json.line_items || [];
   const billTo = normalized.billTo || json.billing_party || (destination !== "Not identified" ? destination : "Not identified");
-  const type = normalized.type || json.type || "customer_delivery";
-  const bt_type = normalized.btType || json.bt_type || "customer_delivery";
-  const bt_order_type = normalized.btOrderType || json.bt_order_type || (type === "branch_transfer" ? getBTOrderType(comingFrom, destination) : bt_type.replace(/_/g, " "));
   const deliveryStart = normalized.deliveryStart || "13 Ha Crescent, Harvey Norman Warehouse";
   const deliveryStops = normalized.deliveryStops || (destination !== "Not identified" ? [destination] : []);
   const sourceEmailSubject = normalized.sourceEmailSubject || json.email_subject || "Not identified";
@@ -1680,11 +1426,7 @@ function getNormalizedOrder(order) {
 
   return {
     ...json,
-    type,
-    bt_type,
-    bt_order_type,
     invoiceNo,
-    orderNo,
     comingFrom,
     destination,
     products,
@@ -1693,8 +1435,7 @@ function getNormalizedOrder(order) {
     deliveryStops,
     sourceEmailSubject,
     sourceEmailBody,
-    sourceAttachments,
-    deliveryAddress: normalized.deliveryAddress || destination
+    sourceAttachments
   };
 }
 
@@ -1865,38 +1606,32 @@ class EmailScanner {
     const docDataList = [];
     const attachmentPaths = [];
 
+    for (const att of attachments) {
+      const ext = path.extname(att.filename || "").toLowerCase();
       const validExts = [".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".tif", ".bmp", ".gif"];
-      const savedAttachments = [];
-      for (const att of attachments) {
-        const ext = path.extname(att.filename || "").toLowerCase();
-        if (!validExts.includes(ext)) continue;
+      if (!validExts.includes(ext)) continue;
 
-        const attId = uuidv4();
-        const attPath = path.join(__dirname, "uploads", `${attId}${ext}`);
-        fs.writeFileSync(attPath, att.content);
-        attachmentPaths.push(attPath);
-        savedAttachments.push({ id: attId, filename: att.filename, file_path: attPath, content_type: att.contentType, ext });
+      const attId = uuidv4();
+      const attPath = path.join(__dirname, "uploads", `${attId}${ext}`);
+      fs.writeFileSync(attPath, att.content);
+      attachmentPaths.push(attPath);
 
-        await EmailAttachment.create({
-          id: attId,
-          filename: att.filename,
-          file_path: attPath,
-          content_type: att.contentType,
-        });
-      }
-
-      // Parse all saved attachments (PDFs and images) in parallel, fallback-safe
-      const parsePromises = savedAttachments.map(s =>
-        parseWithDocling(s.file_path, s.filename).then(r => ({ parsed: r, meta: s })).catch(() => ({ parsed: null, meta: s }))
-      );
-      const parseResults = await Promise.all(parsePromises);
-      for (const pr of parseResults) {
-        if (pr.parsed) {
-          pr.parsed.filename = pr.meta.filename;
-          pr.parsed.attPath = pr.meta.file_path;
-          docDataList.push(pr.parsed);
+      if (ext === ".pdf") {
+        const parsedDoc = await parseWithDocling(attPath, att.filename);
+        if (parsedDoc) {
+          parsedDoc.filename = att.filename;
+          parsedDoc.attPath = attPath;
+          docDataList.push(parsedDoc);
         }
       }
+      
+      await EmailAttachment.create({
+        id: attId,
+        filename: att.filename,
+        file_path: attPath,
+        content_type: att.contentType,
+      });
+    }
 
     let docsToProcess = docDataList.length > 0 ? docDataList : [null];
     let createdOrders = [];
@@ -1904,11 +1639,8 @@ class EmailScanner {
     for (const doc of docsToProcess) {
       const normalized = normalizeOrderExtraction(subject, from, body, html, doc ? [doc] : []);
 
-      // Use Docling fields first (doc), then fall back to normalized extraction
-      // For invoice: Docling's supplier_invoice (green) or our extraction
-      // For order: Docling's order_number (blue) or our extraction
-      const invoiceNumRaw = doc && doc.supplier_invoice ? doc.supplier_invoice : normalized.invoiceNo;
-      const orderNumRaw = doc && doc.order_number ? doc.order_number : normalized.orderNo;
+      const invoiceNumRaw = doc ? (doc.invoice_number || doc.order_number || normalized.invoiceNo) : normalized.invoiceNo;
+      const orderNumRaw = doc ? (doc.order_number || doc.invoice_number || normalized.invoiceNo) : normalized.invoiceNo;
 
       const data = {
         order_number: orderNumRaw && orderNumRaw !== "Not identified" && orderNumRaw !== "" ? orderNumRaw : `BT_${uuidv4().substring(0,8)}`,
@@ -1918,11 +1650,9 @@ class EmailScanner {
         email_date: date,
         raw_email_body: body,
         normalized_data: normalized,
-        type: normalized.type || "customer_delivery",
-        bt_type: normalized.btType || "customer_delivery",
         pickup_store: normalized.comingFrom !== "Not identified" ? normalized.comingFrom : "",
         destination_store: normalized.destination !== "Not identified" ? normalized.destination : "",
-        destination_address: normalized.deliveryAddress !== "Not identified" ? normalized.deliveryAddress : (normalized.destination !== "Not identified" ? normalized.destination : ""),
+        destination_address: normalized.destination !== "Not identified" ? normalized.destination : "",
         billing_party: normalized.billTo !== "Not identified" ? normalized.billTo : "",
         location: normalized.destination !== "Not identified" ? normalized.destination : "",
         line_items: normalized.products,
@@ -1997,7 +1727,7 @@ class EmailScanner {
       delivery_date: null,
       warehouse: null,
       special_instructions: [],
-      is_branch_transfer: false,
+      is_goods_movement: false,
       is_return_to_store: false,
     };
     const subjLower = subject.toLowerCase();
@@ -2030,7 +1760,7 @@ class EmailScanner {
       if (match) {
         context.bt_from = this.normalizeStore(match[1].trim());
         if (match[2]) context.bt_to = this.normalizeStore(match[2].trim());
-        context.is_branch_transfer = true;
+        context.is_goods_movement = true;
         break;
       }
     }
@@ -2046,7 +1776,7 @@ class EmailScanner {
         if (match) {
           context.bt_from = this.normalizeStore(match[1].trim());
           context.bt_to = this.normalizeStore(match[2].trim());
-          context.is_branch_transfer = true;
+          context.is_goods_movement = true;
           break;
         }
       }
@@ -2112,9 +1842,11 @@ class EmailScanner {
     if (emailContext.is_return_to_store || merged.document_type === "return_to_store") {
       merged.type = "branch_transfer";
       merged.bt_type = "return_to_store";
-    } else if (merged.bt_from || merged.bt_to || emailContext.is_branch_transfer) {
+    } else if (merged.bt_from || merged.bt_to || emailContext.is_goods_movement) {
       merged.type = "branch_transfer";
-      if (merged.document_type === "purchase_order") {
+      if (emailContext.is_goods_movement || (merged.document_type === "goods_movement")) {
+        merged.bt_type = "goods_movement";
+      } else if (merged.document_type === "purchase_order") {
         merged.bt_type = "purchase_order";
       } else {
         merged.bt_type = "branch_transfer";
@@ -2584,15 +2316,13 @@ class ExportService {
         .map(i => `${i.sku} x${i.quantity}`)
         .join(", ");
 
-      const normalized = getNormalizedOrder(order);
       const values = [
         order.order_number || "",
         order.invoice_number || "",
         (order.email_subject || "").substring(0, 15),
         order.email_date ? new Date(order.email_date).toLocaleDateString("en-GB") : "",
         formattedProducts.substring(0, 15),
-        order.bt_type === "branch_transfer" ? "BT Branch Transfer" : (order.bt_type || "").replace(/_/g, " "),
-        normalized.bt_order_type || "",
+        (order.bt_type || "").replace(/_/g, " "),
         (order.bt_from || "").substring(0, 12),
         (order.bt_to || "").substring(0, 12),
         (order.billing_party || "").substring(0, 12),
@@ -2624,8 +2354,7 @@ class ExportService {
       "Subject": o.email_subject || "",
       "Email Date": o.email_date ? new Date(o.email_date).toISOString().split("T")[0] : "",
       "Products": (o.line_items || []).map(i => `${i.sku} x${i.quantity}`).join(", "),
-      "BT Type": o.bt_type === "branch_transfer" ? "BT Branch Transfer" : (o.bt_type || "").replace(/_/g, " "),
-      "BT Route Type": o.bt_order_type || "",
+      "BT Type": (o.bt_type || "").replace(/_/g, " "),
       "BT From": o.bt_from || "",
       "BT To": o.bt_to || "",
       "Billing party": o.billing_party || "",
@@ -2666,59 +2395,38 @@ app.get("/api/health", async (req, res) => {
 // ORDERS
 // ---------------------------------------------------------------------------
 app.get("/api/orders", async (req, res) => {
-  const { status, bt_type, bt_order_type, store, search, page = 1, limit = 50 } = req.query;
+  const { status, bt_type, store, search, page = 1, limit = 50 } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
   const where = {};
   if (status) where.status = status;
-  if (bt_type) {
-    where.bt_type = bt_type;
-  } else {
-    // Show branch transfer orders only on the main dashboard
-    where.type = "branch_transfer";
-  }
-  const orFilters = [];
+  if (bt_type) where.bt_type = bt_type;
   if (store) {
-    orFilters.push(
+    where[Op.or] = [
       { pickup_store: { [Op.like]: `%${store}%` } },
       { destination_store: { [Op.like]: `%${store}%` } },
       { bt_from: { [Op.like]: `%${store}%` } },
       { bt_to: { [Op.like]: `%${store}%` } },
-    );
+    ];
   }
   if (search) {
-    orFilters.push(
+    where[Op.or] = [
       { order_number: { [Op.like]: `%${search}%` } },
       { invoice_number: { [Op.like]: `%${search}%` } },
       { customer_name: { [Op.like]: `%${search}%` } },
       { email_subject: { [Op.like]: `%${search}%` } },
-    );
+    ];
   }
-  if (orFilters.length > 0) {
-    where[Op.or] = orFilters;
-  }
-  let orders = [];
-  let count = 0;
 
-  if (bt_order_type && bt_order_type !== "all") {
-    const allRows = await Order.findAll({ where, order: [["createdAt", "DESC"]] });
-    const normalizedRows = allRows.map((r) => getNormalizedOrder(r));
-    const filtered = normalizedRows.filter((order) => order.bt_order_type === bt_order_type);
-    count = filtered.length;
-    orders = filtered.slice(offset, offset + parseInt(limit));
-  } else {
-    const result = await Order.findAndCountAll({
-      where,
-      order: [["createdAt", "DESC"]],
-      limit: parseInt(limit),
-      offset,
-    });
-    count = result.count;
-    orders = result.rows.map((r) => getNormalizedOrder(r));
-  }
+  const { count, rows } = await Order.findAndCountAll({
+    where,
+    order: [["createdAt", "DESC"]],
+    limit: parseInt(limit),
+    offset,
+  });
 
   res.json({
-    orders,
+    orders: rows.map(r => getNormalizedOrder(r)),
     pagination: {
       total: count,
       page: parseInt(page),
@@ -2747,21 +2455,21 @@ app.post("/api/orders", async (req, res) => {
 });
 
 app.put("/api/orders/:id", async (req, res) => {
-  const order = await Order.findByPk(decodeURIComponent(req.params.id));
+  const order = await Order.findByPk(req.params.id);
   if (!order) return res.status(404).json({ error: "Not found" });
   await order.update(req.body);
   res.json(getNormalizedOrder(order));
 });
 
 app.delete("/api/orders/:id", async (req, res) => {
-  const order = await Order.findByPk(decodeURIComponent(req.params.id));
+  const order = await Order.findByPk(req.params.id);
   if (!order) return res.status(404).json({ error: "Not found" });
   await order.destroy();
   res.json({ message: "Order deleted", booking_id: req.params.id });
 });
 
 app.patch("/api/orders/:id/status", async (req, res) => {
-  const order = await Order.findByPk(decodeURIComponent(req.params.id));
+  const order = await Order.findByPk(req.params.id);
   if (!order) return res.status(404).json({ error: "Not found" });
   const updates = {};
   let notifyField = null;
@@ -2848,9 +2556,7 @@ app.post("/api/stores", async (req, res) => {
 // EMAIL ACCOUNTS & SCANNING
 // ---------------------------------------------------------------------------
 app.get("/api/email-accounts", async (req, res) => {
-  // Do not expose stored passwords via API responses. Exclude `password` field.
-  const accounts = await EmailAccount.findAll({ attributes: { exclude: ["password"] } });
-  res.json(accounts);
+  res.json(await EmailAccount.findAll());
 });
 
 app.post("/api/email-accounts", async (req, res) => {
@@ -2953,11 +2659,9 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
       email_date: new Date(),
       raw_email_body: body,
       normalized_data: normalized,
-      type: normalized.type || "customer_delivery",
-      bt_type: normalized.btType || "customer_delivery",
       pickup_store: normalized.comingFrom !== "Not identified" ? normalized.comingFrom : "",
       destination_store: normalized.destination !== "Not identified" ? normalized.destination : "",
-      destination_address: normalized.deliveryAddress !== "Not identified" ? normalized.deliveryAddress : (normalized.destination !== "Not identified" ? normalized.destination : ""),
+      destination_address: normalized.destination !== "Not identified" ? normalized.destination : "",
       billing_party: normalized.billTo !== "Not identified" ? normalized.billTo : "",
       location: normalized.destination !== "Not identified" ? normalized.destination : "",
       line_items: normalized.products,
@@ -3011,17 +2715,15 @@ app.post("/api/upload", upload.single("document"), async (req, res) => {
 // DASHBOARD & EXPORT
 // ---------------------------------------------------------------------------
 app.get("/api/dashboard", async (req, res) => {
-  const baseWhere = { type: "branch_transfer" };
-  
-  const total = await Order.count({ where: baseWhere });
-  const pendingCount = await Order.count({ where: { ...baseWhere, status: "pending" } });
-  const inProgress = await Order.count({ where: { ...baseWhere, status: "in_progress" } });
-  const completed = await Order.count({ where: { ...baseWhere, status: "completed" } });
-  const btOrders = await Order.count({ where: { ...baseWhere, type: "branch_transfer" } });
-  const pickedUp = await Order.count({ where: { ...baseWhere, picked_up: true } });
-  const delivered = await Order.count({ where: { ...baseWhere, delivered: true } });
+  const total = await Order.count();
+  const pendingCount = await Order.count({ where: { status: "pending" } });
+  const inProgress = await Order.count({ where: { status: "in_progress" } });
+  const completed = await Order.count({ where: { status: "completed" } });
+  const btOrders = await Order.count({ where: { type: "branch_transfer" } });
+  const pickedUp = await Order.count({ where: { picked_up: true } });
+  const delivered = await Order.count({ where: { delivered: true } });
   const pendingMetrics = total - delivered;
-  const recent = await Order.findAll({ where: baseWhere, order: [["createdAt", "DESC"]], limit: 10 });
+  const recent = await Order.findAll({ order: [["createdAt", "DESC"]], limit: 10 });
   res.json({
     counts: { 
       total, 
@@ -3039,7 +2741,7 @@ app.get("/api/dashboard", async (req, res) => {
 
 app.get("/api/dashboard/export/pdf", async (req, res) => {
   const { date_from, date_to } = req.query;
-  const where = { type: "branch_transfer" };
+  const where = {};
   if (date_from || date_to) {
     where.createdAt = {};
     if (date_from) where.createdAt[Op.gte] = new Date(date_from);
@@ -3055,7 +2757,7 @@ app.get("/api/dashboard/export/pdf", async (req, res) => {
 
 app.get("/api/dashboard/export/excel", async (req, res) => {
   const { date_from, date_to } = req.query;
-  const where = { type: "branch_transfer" };
+  const where = {};
   if (date_from || date_to) {
     where.createdAt = {};
     if (date_from) where.createdAt[Op.gte] = new Date(date_from);
@@ -3831,14 +3533,12 @@ const PORT = process.env.PORT || 5000;
       
       // Update order fields
       order.invoice_number = normalized.invoiceNo !== "Not identified" ? normalized.invoiceNo : order.invoice_number;
-      if (normalized.orderNo && normalized.orderNo !== "Not identified") {
-        order.order_number = normalized.orderNo;
-      } else if (normalized.invoiceNo !== "Not identified" && order.order_number.startsWith("BT_")) {
+      if (normalized.invoiceNo !== "Not identified" && order.order_number.startsWith("BT_")) {
         order.order_number = normalized.invoiceNo;
       }
       order.pickup_store = normalized.comingFrom;
       order.destination_store = normalized.destination;
-      order.destination_address = normalized.deliveryAddress !== "Not identified" ? normalized.deliveryAddress : normalized.destination;
+      order.destination_address = normalized.destination;
       order.billing_party = normalized.billTo;
       order.location = normalized.destination;
       order.line_items = normalized.products;

@@ -199,6 +199,13 @@ Order created/updated in SQLite with all dashboard fields
 Dashboard displays paginated results (50 per page)
 ```
 
+## Security & Secrets Guidance
+
+- **Do not store email account passwords in plaintext in the database.** Prefer using app-specific passwords and environment variables for credentials. Example: store the account `email` and `username` in the `email_accounts` table but keep `password` in the host's `.env` (or a secrets manager) and reference it at runtime.
+- The API no longer returns the `password` field from `/api/email-accounts` responses to reduce accidental exposure.
+- For production, use a secrets manager (AWS Secrets Manager, Azure Key Vault, HashiCorp Vault) or at minimum limit access to the `.env` file and use OS-level protections.
+- When configuring Gmail, use App Passwords (2FA) instead of the main account password.
+
 ## Key Improvements Over Old System
 
 | Old System | New System |
