@@ -2804,6 +2804,30 @@ class ExportService {
     } catch { return ""; }
   }
 
+  // Helper: clean up description garbage
+  _formatProductsForExport(items) {
+    if (!Array.isArray(items)) return "";
+    return items.map(i => {
+      let desc = i.description || "";
+      if (desc) {
+        desc = desc.replace(/Order\s+\d+\s*/gi, '');
+        desc = desc.replace(/@\s*\d+\.\d+\s*TOT:.*$/is, '');
+        desc = desc.replace(/(\d+\.\d+\s*){2,}.*$/is, '');
+        desc = desc.replace(/Total Ex\.GST.*$/is, '');
+        desc = desc.replace(/\*\s*\*\s*\*\s*End of Report.*/is, '');
+        desc = desc.replace(/RES:\s*\d+\s*/gi, '');
+        desc = desc.replace(/Delv Qty:\s*\d+\s*/gi, '');
+        desc = desc.replace(/Est\.Ship:\s*Order\s*Response\s*/gi, '');
+        desc = desc.replace(/Manufacturer Warranty.*/is, '');
+        desc = desc.replace(/See Manufacturers.*/is, '');
+        desc = desc.replace(/:\s*\d+\s*$/g, ''); // Removes dangling ": 1"
+        desc = desc.replace(/\s+/g, ' ').trim();
+      }
+      const finalName = desc && desc.length > 2 ? desc : (i.sku || "Unknown");
+      return `${finalName} x${i.quantity}`;
+    }).join(", ");
+  }
+
   // Helper: sum total quantity from line_items
   _getTotalQuantity(order) {
     try {
@@ -2858,9 +2882,7 @@ class ExportService {
       const items = typeof order.line_items === "string"
         ? JSON.parse(order.line_items || "[]")
         : (order.line_items || []);
-      const formattedProducts = items
-        .map(i => `${i.description || i.sku} x${i.quantity}`)
-        .join(", ");
+      const formattedProducts = this._formatProductsForExport(items);
       const totalQty = items.reduce((sum, i) => sum + (i.quantity || 0), 0);
       const btRouteType = this._getBtRouteType(order);
 
@@ -2919,7 +2941,7 @@ class ExportService {
         "Invoice #": o.invoice_number || "",
         "Subject": o.email_subject || "",
         "Email Date": o.email_date ? new Date(o.email_date).toISOString().split("T")[0] : "",
-        "Products": items.map(i => `${i.description || i.sku} x${i.quantity}`).join(", "),
+        "Products": this._formatProductsForExport(items),
         "Quantity": totalQty > 0 ? totalQty : "",
         "BT Type": o.bt_type === "branch_transfer" ? "BT Branch Transfer" : (o.bt_type || "").replace(/_/g, " "),
         "BT Route Type": btRouteType,
