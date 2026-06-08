@@ -5,6 +5,7 @@ import RoutePlanner from "./components/RoutePlanner";
 import Settings from "./components/Settings";
 import LiveMap from "./components/LiveMap";
 import Roster from "./components/Roster";
+import RosterPlanner from "./components/RosterPlanner";
 import Notifications from "./components/Notifications";
 import API from "./services/api";
 import { Truck, Settings as SettingsIcon, Map, BarChart3, AlertCircle, Calendar, MessageSquare, Navigation } from "lucide-react";
@@ -30,6 +31,7 @@ export default function App() {
     dashboard: <Dashboard onSelectOrder={(o) => { setSelectedOrder(o); setView("detail"); }} />,
     detail: <OrderDetail order={selectedOrder} onBack={() => setView("dashboard")} />,
     route: <RoutePlanner />,
+    roster_planner: <RosterPlanner />,
     map: <LiveMap />,
     roster: <Roster />,
     notifications: <Notifications />,
@@ -84,6 +86,7 @@ export default function App() {
           >
             <Navigation size={15} /> Live Map
           </button>
+
           <button 
             onClick={() => setView("roster")} 
             className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all ${

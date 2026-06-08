@@ -1,6 +1,6 @@
 const fs = require('fs');
 const code = fs.readFileSync('server.js', 'utf8');
-eval(code.replace(/app\.listen[\s\S]*/, ''));
+eval(code.replace(/app\.listen[\s\S]*/, '})();'));
 
 const cache = require('./docling_cache.json');
 const keys = Object.keys(cache).filter(k => cache[k].raw_markdown && cache[k].raw_markdown.includes('NZ0200000342578'));

@@ -16,7 +16,7 @@ extractCode = extractCode.replace(/const allFound = findAllStoresInText\(combine
 extractCode = extractCode.replace(/return \{/, 'console.log("Returning:", comingFrom, destination); return {');
 
 const testCode = `
-const { matchStore, extractStoreFromOrderNumber, findAllStoresInText } = require('./server.js');
+const { matchStore, extractStoreFromOrderNumber, findAllStoresInText, STORE_REGISTRY } = require('./server.js');
 ${extractCode}
 
 const cache = require('./docling_cache.json');

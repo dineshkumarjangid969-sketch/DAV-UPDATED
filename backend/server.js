@@ -18,6 +18,7 @@ const geolib = require("geolib");
 const nodemailer = require("nodemailer");
 const pdfParse = require('pdf-parse');
 const { spawnSync } = require('child_process');
+const routingEngine = require('./routingEngine');
 
 const app = express();
 app.use(cors());
@@ -381,48 +382,51 @@ const EmailAttachment = sequelize.define("EmailAttachment", {
 // STORE REGISTRY
 // ============================================================================
 const STORE_REGISTRY = {
-  "Wairau Park": { lat: -36.7816, lon: 174.7510, region: "Auckland", aliases: ["Wairau", "wairau park", "commercial wairau"] },
-  "Albany": { lat: -36.7263, lon: 174.6994, region: "Auckland", aliases: ["albany"] },
-  "Westgate": { lat: -36.8183, lon: 174.6112, region: "Auckland", aliases: ["westgate"] },
-  "Lower Hutt": { lat: -41.2092, lon: 174.9081, region: "Wellington", aliases: ["lower hutt", "hutt"] },
-  "Palmerston North": { lat: -40.3523, lon: 175.6082, region: "Manawatu", aliases: ["palmerston north", "palmy"] },
-  "Hamilton": { lat: -37.7870, lon: 175.2793, region: "Waikato", aliases: ["hamilton"] },
-  "Whanganui": { lat: -39.9334, lon: 175.0479, region: "Manawatu", aliases: ["whanganui", "wanganui"] },
-  "Whakatane": { lat: -37.9534, lon: 176.9908, region: "Bay of Plenty", aliases: ["whakatane"] },
-  "Whangarei": { lat: -35.7251, lon: 174.3237, region: "Northland", aliases: ["whangarei"] },
-  "Hastings": { lat: -39.6396, lon: 176.8392, region: "Hawkes Bay", aliases: ["hastings", "akina"] },
-  "Mt Wellington": { lat: -36.8939, lon: 174.8470, region: "Auckland", aliases: ["mt wellington", "mount wellington", "mt. wellington", "mt.wellington"] },
-  "Manukau": { lat: -36.9896, lon: 174.8696, region: "Auckland", aliases: ["manukau"] },
-  "Porirua": { lat: -41.1337, lon: 174.8406, region: "Wellington", aliases: ["porirua"] },
-  "New Plymouth": { lat: -39.0556, lon: 174.0752, region: "Taranaki", aliases: ["new plymouth"] },
-  "Pukekohe": { lat: -37.2005, lon: 174.9010, region: "Auckland", aliases: ["pukekohe"] },
-  "Mt Maunganui": { lat: -37.6600, lon: 176.2200, region: "Bay of Plenty", aliases: ["mt maunganui", "mount maunganui"] },
-  "Botany": { lat: -36.9300, lon: 174.9100, region: "Auckland", aliases: ["botany"] },
-  "Rotorua": { lat: -38.1400, lon: 176.2500, region: "Bay of Plenty", aliases: ["rotorua"] },
-  "Masterton": { lat: -40.9500, lon: 175.6600, region: "Wellington", aliases: ["masterton"] },
-  "Mt Roskill": { lat: -36.9100, lon: 174.7300, region: "Auckland", aliases: ["mt roskill", "mount roskill"] },
-  "Dargaville": { lat: -35.9300, lon: 173.8700, region: "Northland", aliases: ["dargaville"] },
-  "Timaru": { lat: -44.3984, lon: 171.2524, region: "Canterbury", aliases: ["timaru"] },
-  
-  // The Warehouse stores
-  "The Warehouse Wairau Park": { lat: -36.7800, lon: 174.7500, region: "Auckland", aliases: ["the warehouse wairau park", "warehouse wairau", "tw wairau"] },
-  "The Warehouse Albany": { lat: -36.7200, lon: 174.7000, region: "Auckland", aliases: ["the warehouse albany", "warehouse albany", "tw albany"] },
-  "The Warehouse Westgate": { lat: -36.8100, lon: 174.6100, region: "Auckland", aliases: ["the warehouse westgate", "warehouse westgate", "tw westgate"] },
-  "The Warehouse Manukau": { lat: -36.9800, lon: 174.8600, region: "Auckland", aliases: ["the warehouse manukau", "warehouse manukau", "tw manukau"] },
-  "The Warehouse Hamilton": { lat: -37.7800, lon: 175.2700, region: "Waikato", aliases: ["the warehouse hamilton", "warehouse hamilton", "tw hamilton"] },
-  "The Warehouse Palmerston North": { lat: -40.3500, lon: 175.6000, region: "Manawatu", aliases: ["the warehouse palmerston north", "warehouse palmerston north", "warehouse palmy", "tw palmerston north", "tw palmy"] },
-  "The Warehouse Whanganui": { lat: -39.9300, lon: 175.0400, region: "Manawatu", aliases: ["the warehouse whanganui", "warehouse whanganui", "warehouse wanganui", "tw whanganui", "tw wanganui"] },
-  "The Warehouse Whakatane": { lat: -37.9500, lon: 176.9900, region: "Bay of Plenty", aliases: ["the warehouse whakatane", "warehouse whakatane", "tw whakatane"] },
-  "The Warehouse Whangarei": { lat: -35.7200, lon: 174.3200, region: "Northland", aliases: ["the warehouse whangarei", "warehouse whangarei", "tw whangarei"] },
-  "The Warehouse Hastings": { lat: -39.6300, lon: 176.8300, region: "Hawkes Bay", aliases: ["the warehouse hastings", "warehouse hastings", "tw hastings"] },
-  "The Warehouse Lower Hutt": { lat: -41.2000, lon: 174.9000, region: "Wellington", aliases: ["the warehouse lower hutt", "warehouse lower hutt", "warehouse hutt", "tw lower hutt", "tw hutt"] },
-  "The Warehouse Porirua": { lat: -41.1300, lon: 174.8400, region: "Wellington", aliases: ["the warehouse porirua", "warehouse porirua", "tw porirua"] },
-  "The Warehouse New Plymouth": { lat: -39.0500, lon: 174.0700, region: "Taranaki", aliases: ["the warehouse new plymouth", "warehouse new plymouth", "tw new plymouth"] },
-  "The Warehouse Rotorua": { lat: -38.1400, lon: 176.2500, region: "Bay of Plenty", aliases: ["the warehouse rotorua", "warehouse rotorua", "tw rotorua"] },
-  "The Warehouse Masterton": { lat: -40.9500, lon: 175.6600, region: "Wellington", aliases: ["the warehouse masterton", "warehouse masterton", "tw masterton"] },
-  
-  // Warehouse / distribution locations
-  "13 Ha Crescent, Harvey Norman Warehouse": { lat: -36.9300, lon: 174.9100, region: "Auckland", aliases: ["13 ha crescent", "ha crescent", "harvey norman warehouse", "hn warehouse", "east tamaki warehouse", "tamaki warehouse", "tamaki"] },
+  // --- DISTRIBUTION CENTRES ---
+  'Wiri DC': { lat: -37.0125, lon: 174.8624, region: 'Auckland', address: '13 Ha Crescent, Wiri, Auckland 2104', aliases: ['DC', 'Wiri'] },
+
+  // --- AUCKLAND & NORTHLAND ---
+  'Wairau Park': { lat: -36.7816, lon: 174.7510, region: 'Auckland', address: '10 Croftfield Lane, Wairau Park, Glenfield', aliases: ['Wairau', 'Flagship'] },
+  'Westgate': { lat: -36.8183, lon: 174.6112, region: 'Auckland', address: '63-65 Maki Street, Westgate', aliases: [] },
+  'Mt Roskill': { lat: -36.9113, lon: 174.7335, region: 'Auckland', address: '167-169 Stoddard Road, Mt Roskill', aliases: ['Mount Roskill'] },
+  'Mt Wellington': { lat: -36.9183, lon: 174.8488, region: 'Auckland', address: '20-54 Mount Wellington Highway, Mt Wellington', aliases: ['Mount Wellington', 'Sylvia Park'] },
+  'Botany Downs': { lat: -36.9298, lon: 174.9126, region: 'Auckland', address: '500 Ti Rakau Drive, Botany Downs', aliases: ['Botany'] },
+  'Botany Downs Outlet': { lat: -36.9270, lon: 174.9100, region: 'Auckland', address: '451 Ti Rakau Drive, Unit F, Botany Downs', aliases: ['Botany Outlet'] },
+  'Manukau': { lat: -36.9900, lon: 174.8810, region: 'Auckland', address: '8/72 Cavendish Drive, Manukau Supa Centa', aliases: [] },
+  'Takanini Outlet': { lat: -37.0506, lon: 174.9351, region: 'Auckland', address: '230 Great South Road, Takanini', aliases: ['Takanini'] },
+  'Pukekohe': { lat: -37.2025, lon: 174.9015, region: 'Auckland', address: '182-192 Manukau Road, Pukekohe', aliases: [] },
+  'Whangarei': { lat: -35.7423, lon: 174.3168, region: 'Northland', address: '5 Gumdigger Place, Raumanga, Whangarei', aliases: [] },
+
+  // --- CENTRAL NORTH ISLAND & BAY OF PLENTY ---
+  'Hamilton': { lat: -37.7656, lon: 175.2573, region: 'Waikato', address: '10-16 The Boulevard, Te Rapa, Hamilton', aliases: ['Te Rapa'] },
+  'Hamilton Outlet': { lat: -37.7870, lon: 175.2793, region: 'Waikato', address: 'Unit 1, 79 Tristram Street, Hamilton', aliases: [] },
+  'Tauriko': { lat: -37.7391, lon: 176.0963, region: 'Bay of Plenty', address: '19 Taurikura Drive, Tauriko, Tauranga', aliases: ['Tauranga'] },
+  'Mt Maunganui': { lat: -37.6698, lon: 176.2163, region: 'Bay of Plenty', address: '10 Owens Place, Mt Maunganui', aliases: ['Mount Maunganui'] },
+  'Whakatane': { lat: -37.9575, lon: 176.9744, region: 'Bay of Plenty', address: '35 State Highway 30 Unit 1, The Hub, Whakatane', aliases: [] },
+  'Rotorua': { lat: -38.1387, lon: 176.2520, region: 'Bay of Plenty', address: '35 Victoria Street, Rotorua', aliases: [] },
+  'Gisborne': { lat: -38.6653, lon: 178.0205, region: 'Gisborne', address: '51 Customhouse Street, Gisborne', aliases: [] },
+
+  // --- LOWER NORTH ISLAND ---
+  'New Plymouth': { lat: -39.0357, lon: 174.1033, region: 'Taranaki', address: '23 Smart Road, Waiwakaiho, New Plymouth', aliases: [] },
+  'Whanganui': { lat: -39.9298, lon: 175.0505, region: 'Manawatu-Wanganui', address: '287 Victoria Avenue, Whanganui', aliases: ['Wanganui'] },
+  'Palmerston North': { lat: -40.3551, lon: 175.6111, region: 'Manawatu-Wanganui', address: '361-371 Main Street West, Palmerston North', aliases: ['Palmy'] },
+  'Hastings': { lat: -39.6385, lon: 176.8447, region: 'Hawkes Bay', address: '303 Saint Aubyn Street East, Hastings', aliases: ['Napier'] },
+  'Masterton': { lat: -40.9525, lon: 175.6601, region: 'Wellington', address: '230 High Street, Masterton', aliases: [] },
+  'Porirua': { lat: -41.1352, lon: 174.8383, region: 'Wellington', address: '19 Parumoana Street, Porirua', aliases: [] },
+  'Lower Hutt': { lat: -41.2104, lon: 174.9038, region: 'Wellington', address: '28 Rutherford Street, Lower Hutt', aliases: ['Hutt'] },
+  'Tory Street': { lat: -41.2941, lon: 174.7812, region: 'Wellington', address: '77-87 Tory Street, Te Aro, Wellington', aliases: ['Wellington CBD', 'Te Aro'] },
+
+  // --- SOUTH ISLAND ---
+  'Nelson': { lat: -41.2750, lon: 173.2833, region: 'Tasman', address: '69 St Vincent Street, Nelson', aliases: [] },
+  'Blenheim': { lat: -41.5135, lon: 173.9535, region: 'Marlborough', address: '19-21 Maxwell Road, Blenheim', aliases: [] },
+  'Christchurch': { lat: -43.5385, lon: 172.6375, region: 'Canterbury', address: '250 Moorhouse Avenue, Christchurch', aliases: ['Moorhouse'] },
+  'Hornby': { lat: -43.5412, lon: 172.5186, region: 'Canterbury', address: '10-14 Chappie Place, Hornby, Christchurch', aliases: [] },
+  'Northwood Outlet': { lat: -43.4682, lon: 172.6178, region: 'Canterbury', address: '1 Radcliffe Road Unit D, Northwood, Christchurch', aliases: ['Northwood'] },
+  'Ashburton': { lat: -43.9015, lon: 171.7456, region: 'Canterbury', address: 'Cnr West Street and Moore Street, Ashburton', aliases: [] },
+  'Timaru': { lat: -44.3846, lon: 171.2505, region: 'Canterbury', address: '226 Evans Street, Timaru', aliases: [] },
+  'Dunedin': { lat: -45.8778, lon: 170.5005, region: 'Otago', address: '20 MacLaggan Street, Dunedin', aliases: ['Maclaggan'] },
+  'Dunedin Outlet': { lat: -45.8913, lon: 170.4952, region: 'Otago', address: '95 Hillside Road South, Dunedin', aliases: [] },
+  'Invercargill': { lat: -46.4116, lon: 168.3551, region: 'Southland', address: '245 Tay Street, Invercargill', aliases: [] }
 };
 
 const STORE_NUMBER_MAP = {
@@ -718,10 +722,16 @@ function truncateTo6Digits(val) {
 }
 
 function extractInvoiceNo(combinedContent) {
-  // 0. Try P/O Response format (BT2) for Invoice - "Supplier Invoice: XXXXXX" (green color in PDF)
-  const bt2InvMatch = combinedContent.match(/Supplier\s+Invoice[:\s]*([0-9]+)/i);
-  if (bt2InvMatch && bt2InvMatch[1]) {
-    return bt2InvMatch[1];
+  // First, check if a primary Customer Tax Invoice is attached in the bundle (e.g., "32/2640880")
+  const customerInvMatch = combinedContent.match(/(?:TAX\s+INVOICE|INVOICE\s+REPRINT)[\s:]*([0-9]+\/[0-9]+)/i);
+  if (customerInvMatch && customerInvMatch[1]) {
+    return customerInvMatch[1].trim();
+  }
+
+  // Next, look for the Tape Contents Supplier Invoice, removing the strict colon requirement
+  const supplierInvMatch = combinedContent.match(/Supplier\s+Invoice[\s:]*([A-Za-z0-9\-]+)/i);
+  if (supplierInvMatch && supplierInvMatch[1]) {
+    return supplierInvMatch[1].trim();
   }
 
   // First try high-priority Harvey Norman order formats (e.g. PONZ0220000341874, NZ0220000341874, NZ-022-3831432)
@@ -2968,6 +2978,28 @@ const exportService = new ExportService();
 // API ROUTES
 // ============================================================================
 
+function getNormalizedOrder(order) {
+  if (!order) return null;
+  const o = typeof order.get === "function" ? order.get({ plain: true }) : order;
+  if (typeof o.line_items === "string") {
+    try { o.line_items = JSON.parse(o.line_items); } catch(e) { o.line_items = []; }
+  }
+  if (typeof o.normalized_data === "string") {
+    try { o.normalized_data = JSON.parse(o.normalized_data); } catch(e) { o.normalized_data = {}; }
+  }
+  
+  // Add mapped fields expected by the frontend Dashboard
+  o.invoiceNo = o.invoice_number;
+  o.sourceEmailSubject = o.email_subject;
+  o.products = o.line_items;
+  o.comingFrom = o.bt_from;
+  o.destination = o.bt_to || o.destination_address;
+  o.billTo = o.billing_party;
+  o.bt_order_type = (o.normalized_data && o.normalized_data.btOrderType) ? o.normalized_data.btOrderType : "";
+
+  return o;
+}
+
 // Health
 app.get("/api/health", async (req, res) => {
   try {
@@ -2986,8 +3018,10 @@ app.get("/api/health", async (req, res) => {
 // ORDERS
 // ---------------------------------------------------------------------------
 app.get("/api/orders", async (req, res) => {
+  console.log("--> GET /api/orders hit");
   const { status, bt_type, bt_order_type, store, search, page = 1, limit = 50 } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
+  console.log("--> GET /api/orders query params parsed");
 
   const where = {};
   if (status) where.status = status;
@@ -3027,25 +3061,42 @@ app.get("/api/orders", async (req, res) => {
     count = filtered.length;
     orders = filtered.slice(offset, offset + parseInt(limit));
   } else {
-    const result = await Order.findAndCountAll({
-      where,
-      order: [["createdAt", "DESC"]],
-      limit: parseInt(limit),
-      offset,
-    });
-    count = result.count;
-    orders = result.rows.map((r) => getNormalizedOrder(r));
+    console.log("--> Calling findAndCountAll...");
+    try {
+      const result = await Order.findAndCountAll({
+        where,
+        order: [["createdAt", "DESC"]],
+        limit: parseInt(limit),
+        offset,
+      });
+      console.log("--> findAndCountAll completed, count:", result.count);
+      count = result.count;
+      console.log("--> Calling map getNormalizedOrder...");
+      orders = result.rows.map((r) => getNormalizedOrder(r));
+      console.log("--> Mapping completed.");
+    } catch(err) {
+      console.error("--> findAndCountAll error:", err);
+      res.status(500).json({ error: err.message });
+      return;
+    }
   }
 
-  res.json({
-    orders,
-    pagination: {
-      total: count,
-      page: parseInt(page),
-      limit: parseInt(limit),
-      totalPages: Math.ceil(count / parseInt(limit)),
-    },
-  });
+  try {
+    console.log("--> Sending res.json...");
+    res.json({
+      orders,
+      pagination: {
+        total: count,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(count / parseInt(limit)),
+      },
+    });
+    console.log("--> res.json completed.");
+  } catch(err) {
+    console.error("--> Error in res.json:", err.message);
+    res.status(500).json({ error: "Serialization error" });
+  }
 });
 
 app.get("/api/orders/:id", async (req, res) => {
@@ -3427,10 +3478,71 @@ function recalculateRouteMetrics(stops, startStoreName) {
   };
 }
 
+app.post("/api/routes/optimize", async (req, res) => {
+  try {
+    const { order_ids, start_store, num_trucks = 1, fleetConfig } = req.body;
+    let orders = [];
+    
+    if (order_ids && order_ids.length > 0) {
+      orders = await Order.findAll({ where: { id: { [Op.in]: order_ids } }, raw: true });
+    } else if (req.body.orders) {
+      orders = req.body.orders;
+    }
+    
+    // Attempt geocoding for orders missing dest_lat/dest_lon
+    for (let o of orders) {
+      if (!o.dest_lat || !o.dest_lon) {
+        const address = o.destination_address || o.destination_store;
+        const coords = await routingEngine.geocodeAddress(address);
+        if (coords) {
+          o.dest_lat = coords.lat;
+          o.dest_lon = coords.lon;
+          // Optionally save to DB if it's a real order
+          if (o.id) {
+            await Order.update({ dest_lat: coords.lat, dest_lon: coords.lon }, { where: { id: o.id } });
+          }
+        }
+      }
+    }
+
+    let config = fleetConfig;
+    if (!config) {
+      config = Array.from({length: parseInt(num_trucks, 10) || 1}).map((_, i) => ({ id: i+1, capacity: 5000, hasOffsider: true }));
+    }
+
+    const { trucks, unassignedOrders } = routingEngine.optimizeRoute(orders, STORE_REGISTRY, config);
+    
+    let total_distance_km = 0;
+    for (const truck of trucks) {
+      total_distance_km += truck.totalDistance;
+    }
+    
+    res.json({ trucks, unassignedOrders, total_distance_km: parseFloat(total_distance_km.toFixed(1)) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Original endpoint updated to use new engine
 app.post("/api/route-plan", async (req, res) => {
   const { order_ids, truck_id, driver_id, offsider_ids, date, start_store } = req.body;
-  const orders = await Order.findAll({ where: { id: { [Op.in]: order_ids } } });
-  const optimized = await routeOptimizer.optimizeRoute(orders, start_store || "Wairau Park");
+  const orders = await Order.findAll({ where: { id: { [Op.in]: order_ids } }, raw: true });
+  
+  // Geocode if necessary
+  for (let o of orders) {
+    if (!o.dest_lat || !o.dest_lon) {
+      const coords = await routingEngine.geocodeAddress(o.destination_address || o.destination_store);
+      if (coords) { o.dest_lat = coords.lat; o.dest_lon = coords.lon; }
+    }
+  }
+
+  const waypoints = routingEngine.optimizeRoute(orders, STORE_REGISTRY);
+  
+  let total_distance_km = 0;
+  for (const wp of waypoints) {
+    total_distance_km += (wp.distanceFromPrev || 0);
+  }
 
   const plan = await RoutePlan.create({
     id: `ROUTE_${Date.now()}`,
@@ -3439,12 +3551,48 @@ app.post("/api/route-plan", async (req, res) => {
     offsider_ids: offsider_ids || [],
     start_store: start_store || "Wairau Park",
     date: date || new Date().toISOString().split("T")[0],
-    stops: optimized.stops,
-    total_distance_km: optimized.total_distance_km,
-    estimated_fuel_cost: optimized.estimated_fuel_cost,
+    stops: waypoints,
+    total_distance_km: total_distance_km,
+    estimated_fuel_cost: total_distance_km * 0.25,
   });
 
-  res.json({ plan, start_point: optimized.start_point });
+  res.json({ plan, start_point: "Wiri DC" });
+});
+
+app.post("/api/routes/upload-manifest", upload.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+  try {
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    let data = [];
+    if (ext === ".csv" || ext === ".xlsx") {
+      const workbook = XLSX.readFile(req.file.path);
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      data = XLSX.utils.sheet_to_json(sheet);
+    } else {
+      return res.status(400).json({ error: "Only CSV and Excel supported for manifest" });
+    }
+    
+    // Clean up file
+    try { fs.unlinkSync(req.file.path); } catch(e){}
+    
+    // Normalise column names
+    const normalizedData = data.map((row, idx) => {
+      const pickup = row["Pickup Store"] || row["Pickup"] || row["pickup_store"] || "Unknown";
+      const dest = row["Destination Address"] || row["Destination"] || row["Address"] || row["destination_address"] || "Unknown";
+      const orderNo = row["Order Number"] || row["Order No"] || row["order_number"] || `ROW-${idx}`;
+      return {
+        id: `manifest-${idx}`,
+        order_number: orderNo,
+        pickup_store: pickup,
+        destination_address: dest,
+      };
+    });
+
+    res.json({ success: true, count: normalizedData.length, orders: normalizedData });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get("/api/route-plans", async (req, res) => {
@@ -3946,7 +4094,8 @@ async function waitForDoclingReady() {
 // ============================================================================
 const PORT = process.env.PORT || 5000;
 
-(async () => {
+if (require.main === module) {
+  (async () => {
   await sequelize.sync();
   console.log("[DB] Database synced");
 
@@ -4248,5 +4397,6 @@ const PORT = process.env.PORT || 5000;
     console.log(`[SERVER] Docling service expected at ${DOCLING_URL}`);
   });
 })();
+}
 
-module.exports = { EmailScanner, normalizeOrderExtraction, STORE_REGISTRY };
+module.exports = { EmailScanner, normalizeOrderExtraction, STORE_REGISTRY, matchStore, extractStoreFromOrderNumber, findAllStoresInText };

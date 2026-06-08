@@ -1,5 +1,5 @@
 
-const { matchStore, extractStoreFromOrderNumber, findAllStoresInText } = require('./server.js');
+const { matchStore, extractStoreFromOrderNumber, findAllStoresInText, STORE_REGISTRY } = require('./server.js');
 function extractRouteFromContent(subject, fromAddress, bodyText, attachmentsText) {
   let comingFrom = null;
   let destination = null;
@@ -30,10 +30,37 @@ function extractRouteFromContent(subject, fromAddress, bodyText, attachmentsText
   const prefixPattern = '(?:hn\\s+|harvey\\s+norman\\s+|tw\\s+|the\\s+warehouse\\s+)?';
   const transitionRegex = new RegExp(`(?:${prefixPattern})(${storePatternStr})\\s*(?:store|branch|warehouse|whouse|wh|showrooms?)?\\s*(?:to|2|->|\\-|\\/)\\s*(?:the\\s+)?(?:${prefixPattern})(${storePatternStr})`, 'i');
   
+  const btRouteRegex = new RegExp(`(?:bt\s*\d*|branch\s+transfer|goods\s+movement|offsite\s+to\s+showroom)\s*(?:[:\-–—\s]*)?(?:from\s+)?(${storePatternStr})\s*(?:to|→|\-|\/|2)\s*(${storePatternStr})`, 'i');
   const matchTransition = cleanCombinedText.match(transitionRegex);
   if (matchTransition) {
     comingFrom = storeMap[matchTransition[1].trim()];
     destination = storeMap[matchTransition[2].trim()];
+  }
+
+  const btRouteMatch = cleanCombinedText.match(btRouteRegex);
+  if (btRouteMatch) {
+    comingFrom = storeMap[btRouteMatch[1].trim()] || comingFrom;
+    destination = storeMap[btRouteMatch[2].trim()] || destination;
+  }
+
+  // 1.1 Explicit phrases like "collect from X" or "deliver to Y" or "from X to Y"
+  const directionalPattern = /(?:(?:pickup|collect|from)\s+from\s+)?(?:(?:harvey norman|hn|the warehouse|tw)\s+)?(Pukekohe|Albany|Wairau\s+Park|Westgate|Lower\s+Hutt|Hamilton|Palmerston\s+North|Whangarei|Whanganui|Hastings|Whakatane|Mt\s+Wellington|Manukau|Porirua|New\s+Plymouth|Henderson)(?:\s+store|\s+warehouse|,\s+please)?\s+(?:and\s+)?(?:to\s+deliver\s+to\s+|to\s+|deliver\s+to\s+)(?:and\s+)?(?:(?:harvey norman|hn|the warehouse|tw)\s+)?(Pukekohe|Albany|Wairau\s+Park|Westgate|Lower\s+Hutt|Hamilton|Palmerston\s+North|Whangarei|Whanganui|Hastings|Whakatane|Mt\s+Wellington|Manukau|Porirua|New\s+Plymouth|Henderson)/i;
+  const dirMatch = cleanCombinedText.match(directionalPattern);
+  if (dirMatch) {
+    if (!comingFrom) comingFrom = matchStore(dirMatch[1]);
+    if (!destination) destination = matchStore(dirMatch[2]);
+  }
+
+  // 1.2 Try explicit directional phrases
+  const explicitStores = findAllStoresInText(combinedText);
+  for (const store of explicitStores) {
+    const storePattern = store.toLowerCase().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    if (!comingFrom && new RegExp(`(?:from|pickup|pick up|collect|collection at)\\s+(?:this\\s+bt\\s+)?(?:the\\s+)?(?:harvey norman\\s+|hn\\s+)?${storePattern}`, 'i').test(cleanCombinedText)) {
+      comingFrom = store;
+    }
+    if (!destination && new RegExp(`(?:and\\s+)?(?:to|deliver to|delivery to|dest|drop|drop off at|drop at|drop to)\\s+(?:the\\s+)?(?:harvey norman\\s+|hn\\s+)?${storePattern}`, 'i').test(cleanCombinedText)) {
+      destination = store;
+    }
   }
 
   // 1.5 Try explicit layout patterns
@@ -53,6 +80,21 @@ function extractRouteFromContent(subject, fromAddress, bodyText, attachmentsText
       const store = matchStore(deliverMatch[1]);
       if (store) {
         destination = store;
+      }
+    }
+  }
+
+  // New rule for custom non-standard destinations using lookahead
+  if (!destination || destination === "Not identified") {
+    // Terminate match before "for repair", "for [word]", punctuation, or end of string
+    const customDestMatch = cleanCombinedText.match(/(?:going\s+back\s+to|going\s+to|return\s+to|deliver\s+to|drop\s+off\s+at)\s+([a-z0-9\s\-&]+?)(?=\s+(?:for\s+repair|for\s+\w+|\.|\n|,|$))/i);
+    if (customDestMatch) {
+      const candidate = customDestMatch[1].trim();
+      if (candidate.length >= 3 && 
+          !/^(the|this|that|us|we|our|you|him|her|them|store|warehouse|showroom|onsite|offsite|customer|repair)$/i.test(candidate) &&
+          !candidate.includes("@") &&
+          !candidate.includes("http")) {
+        destination = candidate.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
       }
     }
   }
@@ -170,10 +212,10 @@ function extractRouteFromContent(subject, fromAddress, bodyText, attachmentsText
         // First, check explicit "from store" or "to store" phrases
         for (const store of allFound) {
           const storePattern = store.toLowerCase().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-          if (new RegExp(`(?:from|collection at)\\s+${storePattern}`, 'i').test(cleanCombinedText)) {
+          if (new RegExp(`(?:from|collection at)\\s+(?:this\\s+bt\\s+)?(?:the\\s+)?(?:harvey norman\\s+|hn\\s+)?${storePattern}`, 'i').test(cleanCombinedText)) {
             comingFrom = store;
           }
-          if (new RegExp(`(?:to|delivery to|dest)\\s+${storePattern}`, 'i').test(cleanCombinedText)) {
+          if (new RegExp(`(?:to|delivery to|dest)\\s+(?:the\\s+)?(?:harvey norman\\s+|hn\\s+)?${storePattern}`, 'i').test(cleanCombinedText)) {
             destination = store;
           }
         }
@@ -196,9 +238,13 @@ function extractRouteFromContent(subject, fromAddress, bodyText, attachmentsText
     }
   }
   
+  const addressMatch = cleanCombinedText.match(/## SHIPPING ADDRESS[\s\n]+([^\n]+)/i);
+  const deliveryAddress = addressMatch && addressMatch[1] ? addressMatch[1].trim() : (destination || "Not identified");
+
   console.log("Returning:", comingFrom, destination); return {
     comingFrom: comingFrom || "Not identified",
-    destination: destination || "Not identified"
+    destination: destination || "Not identified",
+    deliveryAddress
   };
 }
 
