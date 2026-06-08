@@ -2253,14 +2253,16 @@ class EmailScanner {
     context.is_return_to_store = isRts;
 
     const btSubjectPatterns = [
-      // BT Collection From [Store]
-      /BT\s+(?:Collection\s+)?From\s+([A-Za-z\.\s]+?)(?:\s+to\s+([A-Za-z\.\s]+))?/i,
+      // BT Collection From [Store] to [Store]
+      /BT\s+(?:Collection\s+)?From\s+([A-Za-z\.\s]+?)\s+to\s+([A-Za-z\s]+)(?:[^A-Za-z\s]|$)/i,
+      // Fallback: BT Collection From [Store]
+      /BT\s+(?:Collection\s+)?From\s+([A-Za-z\.\s]+)/i,
       // Branch Transfer From [Store] to [Store]
-      /Branch\s+Transfer\s+(?:From\s+)?([A-Za-z\.\s]+?)\s+(?:to\s+)([A-Za-z\.\s]+)/i,
+      /Branch\s+Transfer\s+(?:From\s+)?([A-Za-z\.\s]+?)\s+to\s+([A-Za-z\s]+)(?:[^A-Za-z\s]|$)/i,
       // Goods Movement from [Store] to [Store]
-      /Goods\s+Movement\s+(?:from\s+)?([A-Za-z\.\s]+?)\s+(?:to\s+)([A-Za-z\.\s]+)/i,
+      /Goods\s+Movement\s+(?:from\s+)?([A-Za-z\.\s]+?)\s+to\s+([A-Za-z\s]+)(?:[^A-Za-z\s]|$)/i,
       // BT from [Store] to [Store]
-      /BT\s+(?:from\s+)?([A-Za-z\.\s]+?)\s+(?:to\s+)([A-Za-z\.\s]+)/i,
+      /BT\s+(?:from\s+)?([A-Za-z\.\s]+?)\s+to\s+([A-Za-z\s]+)(?:[^A-Za-z\s]|$)/i,
       // [Store] to [Store] BT
       /([A-Za-z\.\s]+?)\s+(?:to|→)\s+([A-Za-z\.\s]+)\s+(?:BT|Branch Transfer|Goods Movement)/i,
     ];
@@ -2277,9 +2279,9 @@ class EmailScanner {
 
     if (!context.bt_from) {
       const bodyBtPatterns = [
-        /(?:from|OFFSITE)[:\s]+([A-Za-z\.\s]+?)(?:\s+to\s+|\s*→\s*)([A-Za-z\.\s]+)/i,
-        /From\s*:\s*([A-Za-z\.\s]+?)\s+To\s*:\s*([A-Za-z\.\s]+)/i,
-        /BT\s+From\s+([A-Za-z\.\s]+?)\s+To\s+([A-Za-z\.\s]+)/i,
+        /(?:from|OFFSITE)[:\s]+([A-Za-z\.\s]+?)(?:\s+(?:to|and deliver(?: it| to)?)\s+|\s*→\s*)([A-Za-z\.\s]+?)(?:\.|\n|$)/i,
+        /From\s*:\s*([A-Za-z\.\s]+?)\s+To\s*:\s*([A-Za-z\.\s]+?)(?:\n|$)/i,
+        /BT\s+From\s+([A-Za-z\.\s]+?)\s+To\s+([A-Za-z\.\s]+?)(?:\n|$)/i,
       ];
       for (const pattern of bodyBtPatterns) {
         const match = body.match(pattern);
@@ -2297,6 +2299,17 @@ class EmailScanner {
 
     const dateMatch = body.match(/(?:delivery|deliver|date|required by)[:\s]+(\d{1,2}[\/\.]\d{1,2}[\/\.]\d{2,4})/i);
     if (dateMatch) context.delivery_date = dateMatch[1];
+
+    const billToPatterns = [
+      /(?:Charge to|On behalf of|Bill to)[:\s]+([A-Za-z\.\s]+?)(?:\n|\r|$)/i
+    ];
+    for (const pattern of billToPatterns) {
+      const match = body.match(pattern);
+      if (match) {
+        context.explicit_billing_party = this.normalizeStore(match[1].trim());
+        break;
+      }
+    }
 
     const orderPatterns = [
       /(?:\b|_)(?:SO|PO|ORD|HN|INV|Invoice|Inv)[:\s#\-]+([A-Z0-9\-]*[0-9][A-Z0-9\-]*)/i,
@@ -2368,8 +2381,15 @@ class EmailScanner {
       merged.billing_party = merged.bt_from || merged.pickup_store || "Harvey Norman";
       merged.location = merged.bt_from || merged.pickup_store || "";
     } else if (merged.type === "branch_transfer") {
-      merged.billing_party = merged.bt_to || merged.destination_store || merged.pickup_store || "Harvey Norman";
-      merged.location = merged.bt_to || merged.destination_store || merged.destination_address || merged.pickup_store || "";
+      merged.pickup_store = merged.bt_from || merged.pickup_store;
+      merged.destination_store = merged.bt_to || merged.destination_store;
+      
+      const dest = (merged.destination_store && merged.destination_store !== "Not identified") ? merged.destination_store : "";
+      const pkup = (merged.pickup_store && merged.pickup_store !== "Not identified") ? merged.pickup_store : "";
+      const btToFallback = (merged.bt_to && merged.bt_to !== "Not identified") ? merged.bt_to : "";
+      
+      merged.billing_party = emailContext.explicit_billing_party || dest || btToFallback || pkup || "Harvey Norman";
+      merged.location = dest || merged.destination_address || btToFallback || pkup || "";
     } else {
       merged.billing_party = merged.customer_name || merged.destination_store || merged.pickup_store || "Harvey Norman";
       merged.location = merged.destination_address || merged.destination_store || merged.pickup_store || "";
