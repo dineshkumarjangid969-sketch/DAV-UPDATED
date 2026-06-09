@@ -18,5 +18,14 @@ module.exports = {
       autorestart: true,
       watch: false,
     },
+    {
+      name: 'dav-docling',
+      script: 'app.py',
+      interpreter: 'python',
+      cwd: './docling-service',
+      autorestart: true,
+      watch: false,
+    },
   ],
 };
+
