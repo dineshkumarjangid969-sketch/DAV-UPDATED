@@ -2219,7 +2219,9 @@ class EmailScanner {
       orderJson._isNew = isNew;
 
       if (orderJson && orderJson._isNew) {
-        sendEmailConfirmation(orderJson).catch(err => console.error("Auto-reply error:", err));
+        // Auto-reply at BT registration is intentionally disabled.
+        // Emails will only trigger when the status is updated.
+        // sendEmailConfirmation(orderJson).catch(err => console.error("Auto-reply error:", err));
       }
       
       createdOrders.push(orderJson);
@@ -3992,12 +3994,17 @@ app.post("/api/roster/publish", async (req, res) => {
         const message = `Hi ${driver.name}, your DAV Transport shift on ${shift.date} is scheduled: ${shift.shift_type.toUpperCase()} (${shift.start_time}-${shift.end_time}). Please confirm receipt.`;
 
         let sentStatus = "logged";
-        if (twilioClient && TWILIO_WHATSAPP_NUMBER) {
+        if (twilioClient) {
           try {
+            let phoneNum = driver.phone.replace(/[^0-9+]/g, '');
+            if (phoneNum.startsWith('0')) phoneNum = '+64' + phoneNum.substring(1);
+            
+            const fromNum = process.env.TWILIO_FROM_NUMBER || (TWILIO_WHATSAPP_NUMBER ? TWILIO_WHATSAPP_NUMBER.replace('whatsapp:', '') : "+1234567890");
+
             await twilioClient.messages.create({
               body: message,
-              from: process.env.TWILIO_FROM_NUMBER || "+1234567890",
-              to: driver.phone,
+              from: fromNum,
+              to: phoneNum,
             });
             sentStatus = "sent";
           } catch (e) {
@@ -4041,10 +4048,15 @@ app.post("/api/sms/bulk", async (req, res) => {
       let status = "failed";
       if (twilioClient) {
         try {
+          let phoneNum = d.phone.replace(/[^0-9+]/g, '');
+          if (phoneNum.startsWith('0')) phoneNum = '+64' + phoneNum.substring(1);
+          
+          const fromNum = process.env.TWILIO_FROM_NUMBER || (TWILIO_WHATSAPP_NUMBER ? TWILIO_WHATSAPP_NUMBER.replace('whatsapp:', '') : "+1234567890");
+
           await twilioClient.messages.create({
             body: message,
-            from: process.env.TWILIO_FROM_NUMBER || "+1234567890",
-            to: d.phone,
+            from: fromNum,
+            to: phoneNum,
           });
           status = "sent";
           results.sent++;
