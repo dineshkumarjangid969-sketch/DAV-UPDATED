@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import API from "../services/api";
-import { ArrowLeft, Package, Phone, MapPin, FileText, Image as ImageIcon, Mail, CheckCircle, Circle, DollarSign, Clock } from "lucide-react";
+import { ArrowLeft, Package, MapPin, FileText, Image as ImageIcon, Mail, CheckCircle, Circle, DollarSign, Clock } from "lucide-react";
 import { format } from "date-fns";
 
 export default function OrderDetail({ order, onBack }) {
@@ -110,20 +110,12 @@ export default function OrderDetail({ order, onBack }) {
             </div>
           </div>
 
-          {/* Delivery & Address */}
+          {/* Delivery Info */}
           <div className="bg-slate-900/30 border border-slate-800/80 rounded-2xl p-5 space-y-4">
             <h3 className="font-bold text-white flex items-center gap-2 text-sm border-b border-slate-800 pb-2">
-              <MapPin size={16} className="text-orange-400" /> Delivery & Customer Info
+              <MapPin size={16} className="text-orange-400" /> Delivery Info
             </h3>
             <div className="grid grid-cols-2 gap-y-3 text-xs">
-              <div>
-                <p className="text-slate-500 uppercase tracking-wider font-semibold text-[10px]">Customer Name</p>
-                <p className="text-slate-200 mt-0.5 font-bold">{data.customer_name || "Not identified"}</p>
-              </div>
-              <div>
-                <p className="text-slate-500 uppercase tracking-wider font-semibold text-[10px]">Contact Phone</p>
-                <p className="text-slate-200 mt-0.5 font-medium">{data.customer_phone || "Not identified"}</p>
-              </div>
               <div className="col-span-2">
                 <p className="text-slate-500 uppercase tracking-wider font-semibold text-[10px]">Exact Address / Destination</p>
                 <p className="text-slate-200 mt-0.5">{data.destination || "Not identified"}</p>

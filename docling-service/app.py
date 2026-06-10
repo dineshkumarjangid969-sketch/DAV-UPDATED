@@ -181,17 +181,7 @@ class DoclingParser:
             result["bt_to"] = result["pickup_store"]
             result["destination_store"] = result["pickup_store"]
             
-        cust_match = re.search(r"Customer\s+Name[:\s]+([A-Za-z\s]+?)(?=\s+Customer\s+Phone|\s+Please\s+Deliver|$)", text, re.IGNORECASE)
-        if cust_match:
-            result["customer_name"] = cust_match.group(1).strip()
-            
-        phone_match = re.search(r"Customer\s+Phone[:\s]+(\d+)", text, re.IGNORECASE)
-        if phone_match:
-            result["customer_phone"] = phone_match.group(1).strip()
-
-        pickup_match = re.search(r"(?:Pickup\s+From|Customer\s+Address|From)[:\s]+(.*?)(?=\s*(?:Product|Signature|Authorised|$))", text, re.IGNORECASE | re.DOTALL)
-        if pickup_match:
-            result["destination_address"] = pickup_match.group(1).strip().replace("\n", ", ")
+        # Customer details extraction disabled per user request
 
     def _parse_tax_invoice(self, text: str, tables, result: Dict):
         inv_patterns = [
@@ -205,19 +195,8 @@ class DoclingParser:
                 result["invoice_number"] = match.group(1).strip()
                 break
 
-        cust_patterns = [
-            r"Customer\s*:\s*([A-Z][A-Za-z\s\.\-]+?)(?=\n|Phone|Address|Location|Sales|Date|Product|$)",
-            r"Sold\s+To\s*:\s*([A-Z][A-Za-z\s\.\-]+?)(?=\n|Phone|Address|$)",
-            r"(?:Name|Customer\s+Name)\s*:\s*([A-Z][A-Za-z\s\.\-]+?)(?=\n|Phone|Address|$)",
-            r"Delivery\s+To\s*:\s*([A-Z][A-Za-z\s\.\-]+?)(?=\n|Address|Phone|$)",
-        ]
-        for pattern in cust_patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                name = match.group(1).strip()
-                if len(name) > 3 and not any(x in name.upper() for x in ["TAX INVOICE", "INVOICE REPRINT", "PRODUCT", "QTY", "SKU"]):
-                    result["customer_name"] = name
-                    break
+
+        # Customer name extraction disabled per user request
 
         order_patterns = [
             r"(?:Order|SO|Sales Order)[:\s#-]*([A-Z0-9\-]+)",
@@ -272,15 +251,7 @@ class DoclingParser:
         supp_match = re.search(r"Supplier\s+Invoice[:\s]+(\d+)", text, re.IGNORECASE)
         if supp_match:
             result["invoice_number"] = supp_match.group(1).strip()
-        cust_match = re.search(r"Customer\s+Name[:\s]+([A-Za-z\s]+?)(?=\s+Customer\s+Phone|\s+Please\s+Deliver|$)", text, re.IGNORECASE)
-        if cust_match:
-            result["customer_name"] = cust_match.group(1).strip()
-        phone_match = re.search(r"Customer\s+Phone[:\s]+(\d+)", text, re.IGNORECASE)
-        if phone_match:
-            result["customer_phone"] = phone_match.group(1).strip()
-        deliver_match = re.search(r"Please\s+Deliver\s+To[:\s]+(.*?)(?=Authorised|$)", text, re.IGNORECASE | re.DOTALL)
-        if deliver_match:
-            result["destination_address"] = deliver_match.group(1).strip().replace("\n", ", ")
+        # Customer details extraction disabled per user request
         store_match = re.search(r"Harvey\s+Norman\s+(?:Home\s+Furnishings\s+)?([A-Za-z\s]+?)(?=\s+\d+|$)", text, re.IGNORECASE)
         if store_match:
             result["pickup_store"] = self._normalize_store(store_match.group(1).strip())
@@ -448,23 +419,8 @@ class DoclingParser:
                     break
 
     def _extract_phone(self, text: str, result: Dict):
-        phone_patterns = [
-            r"SMS\s+Delivery\s+Updates\s+To\s+(\d[\d\s\-]{6,14})",
-            r"(?:Customer\s+)?Phone[:\s]+(\d[\d\s\-]{6,14})",
-            r"Customer\s*:\s*(\d[\d\s\-]{6,14})",
-            r"(?:Mobile|Ph|Cell|Contact)[:\s]+(\d[\d\s\-]{6,14})",
-            r"(\+?64[\s\-]?[2-9]\d[\s\-]?\d[\s\-]?\d[\s\-]?\d[\s\-]?\d[\s\-]?\d[\s\-]?\d[\s\-]?\d)",
-            r"(0[2-9]\d[\s\-]?\d[\s\-]?\d[\s\-]?\d[\s\-]?\d[\s\-]?\d[\s\-]?\d[\s\-]?\d)",
-            r"(02[\s\-]?\d{3}[\s\-]?\d{4})",
-            r"(02[\s\-]?\d{3}[\s\-]?\d{3}[\s\-]?\d{3})",
-        ]
-        for pattern in phone_patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                phone = match.group(1).strip().replace(" ", "").replace("-", "")
-                if len(phone) >= 8 and len(phone) <= 15:
-                    result["customer_phone"] = phone
-                    break
+        # Phone extraction disabled per user request
+        return
 
     def _extract_flags(self, text_lower: str, result: Dict):
         if "assemble" in text_lower and "customer to assemble" not in text_lower:
