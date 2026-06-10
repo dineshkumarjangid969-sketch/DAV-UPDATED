@@ -312,6 +312,9 @@ class DoclingParser:
             result["order_number"] = order_match.group(1).strip()
         if not result["line_items"]:
             self._extract_line_items_from_text(text, result)
+        
+        if not result["line_items"]:
+            result["line_items"].append({"sku": "GM", "quantity": 1, "description": "Goods movement"})
 
     def _parse_bt_sales_order(self, text: str, tables: List[List[List[str]]], result: Dict):
         """Ruleset 1: Parses structured Sales Order layouts"""
@@ -374,10 +377,17 @@ class DoclingParser:
             result["bt_from"] = self._normalize_store(origin_match.group(1).strip())
             result["pickup_store"] = result["bt_from"]
 
-        # 3. Extract Invoice Number
-        invoice_match = re.search(r"Supplier Invoice:\s*(\d+)", text, re.IGNORECASE)
-        if invoice_match:
-            result["invoice_number"] = invoice_match.group(1).strip()
+        # 3. Extract Invoice Number (Ultra-Robust dual-priority)
+        # First, check if a primary Customer Tax Invoice is attached in the bundle (e.g., "32/2640880")
+        customer_inv_match = re.search(r"(?:TAX\s+INVOICE|INVOICE\s+REPRINT)[\s:]*(\d+/\d+)", text, re.IGNORECASE)
+        # Next, look for the Tape Contents Supplier Invoice
+        supplier_inv_match = re.search(r"Supplier\s+Invoice[\s:]*([A-Za-z0-9\-]+)", text, re.IGNORECASE)
+        if customer_inv_match:
+            # Prioritize the main customer invoice if the PDF contains multiple merged pages
+            result["invoice_number"] = customer_inv_match.group(1).strip()
+        elif supplier_inv_match:
+            # Fallback to the internal supplier invoice (e.g., 2860269)
+            result["invoice_number"] = supplier_inv_match.group(1).strip()
 
         # 4 & 5. Products and Quantities Loop
         # Split text using case-insensitive 'Accepted'
@@ -497,16 +507,50 @@ class DoclingParser:
     def _extract_line_items_from_text(self, text: str, result: Dict):
         lines = text.split("\n")
         for i, line in enumerate(lines):
-            match = re.match(r"^\*?\s*([A-Z0-9\-]{3,})\s+(\d+)\s+(.*)", line)
-            if match:
-                sku = match.group(1).strip()
-                qty = int(match.group(2))
-                desc = match.group(3).strip()
+            line = line.strip()
+            if not line:
+                continue
+                
+            # Skip common headers and BT Route lines
+            if any(x in line.upper() for x in ["TAX INVOICE", "BRANCH TRANSFER", "INVOICE REPRINT", "TRADING AS"]):
+                continue
+            if re.search(r"BT\s+from\s+.*?\s+to\s+", line, re.IGNORECASE):
+                continue
+
+            # Format 3: SKU followed by multiple Prices and then a final Quantity (Order 140375)
+            # e.g., DVH9-09W	1699.04 1699.04 254.86 1953.90	1
+            match3 = re.match(r"^([A-Z0-9\-_\.]{3,})\s+(?:[\d,.]+\s+){3,}(\d+)\s*$", line)
+            if match3:
+                sku = match3.group(1).strip()
+                qty = int(match3.group(2))
+                result["line_items"].append({"sku": sku, "quantity": qty, "description": ""})
+                continue
+
+            # Format 1: SKU QTY DESCRIPTION (Standard)
+            match1 = re.match(r"^\*?\s*([A-Z0-9\-_\.]{3,})\s+(\d+)\s+(.*)", line)
+            if match1:
+                sku = match1.group(1).strip()
+                qty = int(match1.group(2))
+                desc = match1.group(3).strip()
                 if len(desc) < 5 and i + 1 < len(lines):
                     next_line = lines[i + 1].strip()
                     if not next_line.startswith("$") and not re.match(r"^\d", next_line) and len(next_line) > 3:
                         desc = next_line
                 result["line_items"].append({"sku": sku, "quantity": qty, "description": desc})
+                continue
+
+            # Format 2: Price/Total Details before Description (Order 124099, 716194)
+            # e.g., 268.50 268.50 0.00 268.50 THE INCREDI-BED DBL BASE
+            match2 = re.match(r"^(?:[\$\d,.]+\s+){2,}(.*?)(?:\s+Deliver|$|STOCK)", line)
+            if match2:
+                desc = match2.group(1).strip()
+                if desc and len(desc) > 5 and not desc.upper().startswith("GST"):
+                    qty = 1
+                    qty_match = re.search(r"QTY\s*(\d+)", line, re.IGNORECASE)
+                    if qty_match:
+                        qty = int(qty_match.group(1))
+                    result["line_items"].append({"sku": "", "quantity": qty, "description": desc})
+                continue
 
     def _set_coordinates(self, result: Dict):
         if result["pickup_store"] in STORE_REGISTRY:
