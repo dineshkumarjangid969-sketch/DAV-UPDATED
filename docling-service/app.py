@@ -197,6 +197,13 @@ class DoclingParser:
         self._set_coordinates(result)
         self._calculate_billing_and_location(result)
         self._clean_line_items(result)
+        
+        # Normalize order numbers to strip leading zeros and prevent duplicates (e.g. 098447 vs 98447)
+        if result["order_number"]:
+            result["order_number"] = result["order_number"].lstrip('0')
+        if result["invoice_number"]:
+            result["invoice_number"] = result["invoice_number"].lstrip('0')
+            
         result["confidence"] = self._calculate_confidence(result)
         return result
 
@@ -562,6 +569,7 @@ class DoclingParser:
 
     def _clean_line_items(self, result: Dict):
         """Scrubs unwanted metadata (SKU, dimensions, Qty, Allocated by) from product descriptions."""
+        valid_items = []
         for item in result.get('line_items', []):
             desc = item.get('description', '')
             if not desc:
@@ -575,11 +583,17 @@ class DoclingParser:
             # Remove 'allocated by' and qty labels
             desc = re.sub(r'(?i)\b(?:allocated|alloc)\s+by.*$', '', desc)
             desc = re.sub(r'(?i)\bqty\b\s*\d*', '', desc)
-            # Remove explicit pricing or trailing numbers
-            desc = re.sub(r'(?i)\$?\d+\.\d{2}.*$', '', desc)
+            # Remove explicit pricing (inline, any amount of occurrences)
+            desc = re.sub(r'\$?\b\d+\.\d{2}\b', '', desc)
             # Clean up SQU/SKU code references
             desc = re.sub(r'(?i)\b(?:SQU|SKU)\s*code\s*[:\-]?\s*[A-Z0-9\-]+', '', desc)
-            item['description'] = desc.strip(' -,\t\n\r')
+            
+            desc = desc.strip(' -,\t\n\r')
+            # Only keep the product if it has at least one letter (prevents extracting lines of pure numbers)
+            if re.search(r'[a-zA-Z]', desc):
+                item['description'] = desc
+                valid_items.append(item)
+        result['line_items'] = valid_items
 
     def _set_coordinates(self, result: Dict):
         if result["pickup_store"] in STORE_REGISTRY:
