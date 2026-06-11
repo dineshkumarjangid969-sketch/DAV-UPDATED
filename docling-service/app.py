@@ -7,7 +7,7 @@ import os
 import re
 import tempfile
 import shutil
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
@@ -25,18 +25,53 @@ except ImportError:
 
 app = FastAPI(title="DAV Transport Docling Service", version="2.0.0")
 
-# Store Registry
+# Comprehensive STORE_REGISTRY
 STORE_REGISTRY = {
-    'Wairau Park': {'lat': -36.7816, 'lon': 174.7510, 'region': 'Auckland', 'aliases': ['Wairau']},
-    'Albany': {'lat': -36.7263, 'lon': 174.6994, 'region': 'Auckland', 'aliases': []},
-    'Westgate': {'lat': -36.8183, 'lon': 174.6112, 'region': 'Auckland', 'aliases': []},
-    'Hastings': {'lat': -39.6396, 'lon': 176.8392, 'region': 'Hawkes Bay', 'aliases': []},
-    'Palmerston North': {'lat': -40.3523, 'lon': 175.6082, 'region': 'Manawatu', 'aliases': ['Palmy']},
-    'Hamilton': {'lat': -37.7870, 'lon': 175.2793, 'region': 'Waikato', 'aliases': []},
-    'Whanganui': {'lat': -39.9334, 'lon': 175.0479, 'region': 'Manawatu', 'aliases': ['Wanganui']},
-    'Whakatane': {'lat': -37.9534, 'lon': 176.9908, 'region': 'Bay of Plenty', 'aliases': []},
-    'Lower Hutt': {'lat': -41.2092, 'lon': 174.9081, 'region': 'Wellington', 'aliases': ['Hutt']},
-    'Whangarei': {'lat': -35.7251, 'lon': 174.3237, 'region': 'Northland', 'aliases': []},
+    # --- DISTRIBUTION CENTRES ---
+    'Wiri DC': {'lat': -37.0125, 'lon': 174.8624, 'region': 'Auckland', 'address': '13 Ha Crescent, Wiri, Auckland 2104', 'aliases': ['DC', 'Wiri']},
+
+    # --- AUCKLAND & NORTHLAND ---
+    'Wairau Park': {'lat': -36.7816, 'lon': 174.7510, 'region': 'Auckland', 'address': '10 Croftfield Lane, Wairau Park, Glenfield', 'aliases': ['Wairau', 'Flagship']},
+    'Westgate': {'lat': -36.8183, 'lon': 174.6112, 'region': 'Auckland', 'address': '63-65 Maki Street, Westgate', 'aliases': []},
+    'Mt Roskill': {'lat': -36.9113, 'lon': 174.7335, 'region': 'Auckland', 'address': '167-169 Stoddard Road, Mt Roskill', 'aliases': ['Mount Roskill']},
+    'Mt Wellington': {'lat': -36.9183, 'lon': 174.8488, 'region': 'Auckland', 'address': '20-54 Mount Wellington Highway, Mt Wellington', 'aliases': ['Mount Wellington', 'Sylvia Park']},
+    'Botany Downs': {'lat': -36.9298, 'lon': 174.9126, 'region': 'Auckland', 'address': '500 Ti Rakau Drive, Botany Downs', 'aliases': ['Botany']},
+    'Botany Downs Outlet': {'lat': -36.9270, 'lon': 174.9100, 'region': 'Auckland', 'address': '451 Ti Rakau Drive, Unit F, Botany Downs', 'aliases': ['Botany Outlet']},
+    'Manukau': {'lat': -36.9900, 'lon': 174.8810, 'region': 'Auckland', 'address': '8/72 Cavendish Drive, Manukau Supa Centa', 'aliases': []},
+    'Takanini Outlet': {'lat': -37.0506, 'lon': 174.9351, 'region': 'Auckland', 'address': '230 Great South Road, Takanini', 'aliases': ['Takanini']},
+    'Pukekohe': {'lat': -37.2025, 'lon': 174.9015, 'region': 'Auckland', 'address': '182-192 Manukau Road, Pukekohe', 'aliases': []},
+    'Albany': {'lat': -36.7263, 'lon': 174.6994, 'region': 'Auckland', 'address': 'Corinthian Drive, Albany', 'aliases': []},
+    'Whangarei': {'lat': -35.7423, 'lon': 174.3168, 'region': 'Northland', 'address': '5 Gumdigger Place, Raumanga, Whangarei', 'aliases': []},
+
+    # --- CENTRAL NORTH ISLAND & BAY OF PLENTY ---
+    'Hamilton': {'lat': -37.7656, 'lon': 175.2573, 'region': 'Waikato', 'address': '10-16 The Boulevard, Te Rapa, Hamilton', 'aliases': ['Te Rapa']},
+    'Hamilton Outlet': {'lat': -37.7700, 'lon': 175.2600, 'region': 'Waikato', 'address': 'Te Rapa, Hamilton', 'aliases': ['Hamilton Factory']},
+    'Tauranga': {'lat': -37.6878, 'lon': 176.1651, 'region': 'Bay of Plenty', 'address': '3 Taurikura Drive, Tauranga', 'aliases': []},
+    'Rotorua': {'lat': -38.1368, 'lon': 176.2497, 'region': 'Bay of Plenty', 'address': '1217 Amohau Street, Rotorua', 'aliases': []},
+    'Whakatane': {'lat': -37.9534, 'lon': 176.9908, 'region': 'Bay of Plenty', 'address': '21 King Street, Whakatane', 'aliases': []},
+    'Taupo': {'lat': -38.6857, 'lon': 176.0702, 'region': 'Waikato', 'address': '107 Spa Road, Taupo', 'aliases': []},
+
+    # --- LOWER NORTH ISLAND ---
+    'Hastings': {'lat': -39.6396, 'lon': 176.8392, 'region': 'Hawkes Bay', 'address': '900 Railway Road South, Hastings', 'aliases': []},
+    'Napier': {'lat': -39.4929, 'lon': 176.9120, 'region': 'Hawkes Bay', 'address': 'Napier', 'aliases': []},
+    'New Plymouth': {'lat': -39.0556, 'lon': 174.0752, 'region': 'Taranaki', 'address': '63 Eliot Street, New Plymouth', 'aliases': []},
+    'Palmerston North': {'lat': -40.3523, 'lon': 175.6082, 'region': 'Manawatu', 'address': '585 Main Street, Palmerston North', 'aliases': ['Palmy']},
+    'Whanganui': {'lat': -39.9334, 'lon': 175.0479, 'region': 'Manawatu', 'address': '35 Victoria Ave, Whanganui', 'aliases': ['Wanganui']},
+
+    # --- WELLINGTON ---
+    'Lower Hutt': {'lat': -41.2092, 'lon': 174.9081, 'region': 'Wellington', 'address': '28 Rutherford St, Lower Hutt', 'aliases': ['Hutt']},
+    'Porirua': {'lat': -41.1347, 'lon': 174.8509, 'region': 'Wellington', 'address': '1 Hartham Place, Porirua', 'aliases': []},
+    'Lyall Bay': {'lat': -41.3271, 'lon': 174.8040, 'region': 'Wellington', 'address': 'Lyall Bay, Wellington', 'aliases': ['Wellington']},
+
+    # --- SOUTH ISLAND ---
+    'Christchurch': {'lat': -43.5321, 'lon': 172.6362, 'region': 'Canterbury', 'address': '15 Langdons Road, Papanui, Christchurch', 'aliases': ['Papanui']},
+    'Christchurch South': {'lat': -43.5600, 'lon': 172.6000, 'region': 'Canterbury', 'address': 'Christchurch', 'aliases': ['Hornby']},
+    'Dunedin': {'lat': -45.8788, 'lon': 170.5028, 'region': 'Otago', 'address': '333 Andersons Bay Road, Dunedin', 'aliases': []},
+    'Invercargill': {'lat': -46.4132, 'lon': 168.3538, 'region': 'Southland', 'address': '117 Dee Street, Invercargill', 'aliases': []},
+    'Nelson': {'lat': -41.2706, 'lon': 173.2840, 'region': 'Nelson', 'address': '243 Queen Street, Richmond, Nelson', 'aliases': ['Richmond']},
+    'Blenheim': {'lat': -41.5134, 'lon': 173.9612, 'region': 'Marlborough', 'address': 'Blenheim', 'aliases': []},
+    'Timaru': {'lat': -44.3904, 'lon': 171.2373, 'region': 'Canterbury', 'address': 'Timaru', 'aliases': []},
+    'Queenstown': {'lat': -45.0312, 'lon': 168.6626, 'region': 'Otago', 'address': 'Queenstown', 'aliases': []},
 }
 
 class ParseResult(BaseModel):
@@ -152,6 +187,8 @@ class DoclingParser:
             self._parse_goods_movement(text, tables, result)
         elif doc_type == "return_to_store":
             self._parse_return_to_store(text, tables, result)
+        else:
+            self._parse_generic_order(text, tables, result)
 
         self._extract_store_info(text, result)
         self._extract_phone(text, result)
@@ -159,6 +196,7 @@ class DoclingParser:
         self._extract_line_items_from_tables(tables, result)
         self._set_coordinates(result)
         self._calculate_billing_and_location(result)
+        self._clean_line_items(result)
         result["confidence"] = self._calculate_confidence(result)
         return result
 
@@ -507,6 +545,41 @@ class DoclingParser:
                         qty = int(qty_match.group(1))
                     result["line_items"].append({"sku": "", "quantity": qty, "description": desc})
                 continue
+
+    def _parse_generic_order(self, text: str, tables, result: Dict):
+        """Fallback parser for unrecognized document types."""
+        # Try to extract basic order/invoice info
+        inv_match = re.search(r"INVOICE\s*(?:NO|NUMBER|#)?[:\s]*(\d[\d/\-]+)", text, re.IGNORECASE)
+        if inv_match:
+            result["invoice_number"] = inv_match.group(1).strip()
+        order_match = re.search(r"(?:Order|SO|Sales Order)[:\s#-]*([A-Z0-9\-]+)", text, re.IGNORECASE)
+        if order_match:
+            candidate = order_match.group(1).strip()
+            if len(candidate) > 2:
+                result["order_number"] = candidate
+        if not result["line_items"]:
+            self._extract_line_items_from_text(text, result)
+
+    def _clean_line_items(self, result: Dict):
+        """Scrubs unwanted metadata (SKU, dimensions, Qty, Allocated by) from product descriptions."""
+        for item in result.get('line_items', []):
+            desc = item.get('description', '')
+            if not desc:
+                continue
+            # Remove dimensions like 150x200 or 1500 X 2000
+            desc = re.sub(r'\b\d{2,4}\s*[xX]\s*\d{2,4}\b', '', desc)
+            # Remove explicit SKU from description if we know it
+            sku = item.get('sku', '')
+            if sku and sku in desc:
+                desc = desc.replace(sku, '')
+            # Remove 'allocated by' and qty labels
+            desc = re.sub(r'(?i)\b(?:allocated|alloc)\s+by.*$', '', desc)
+            desc = re.sub(r'(?i)\bqty\b\s*\d*', '', desc)
+            # Remove explicit pricing or trailing numbers
+            desc = re.sub(r'(?i)\$?\d+\.\d{2}.*$', '', desc)
+            # Clean up SQU/SKU code references
+            desc = re.sub(r'(?i)\b(?:SQU|SKU)\s*code\s*[:\-]?\s*[A-Z0-9\-]+', '', desc)
+            item['description'] = desc.strip(' -,\t\n\r')
 
     def _set_coordinates(self, result: Dict):
         if result["pickup_store"] in STORE_REGISTRY:

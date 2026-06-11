@@ -1,0 +1,237 @@
+<USER_REQUEST>
+UPDATED & MORE PRECISE RULESET 1 — SALES ORDER DOCUMENTS
+These documents are the most structured, but Harvey Norman uses multiple sub‑layouts.
+This upgraded ruleset handles:
+
+Bedding
+
+Furniture
+
+Electrical
+
+Commercial
+
+Reprints
+
+F2F
+
+Store‑to‑Store
+
+Warehouse‑to‑Store
+
+🔥 Trigger Conditions (must match at least 2)
+A document is classified as Sales Order if ANY TWO of these appear:
+
+"SALES ORDER"
+
+"TAX INVOICE"
+
+"INVOICE REPRINT"
+
+"F2F STOCK SALES"
+
+"Harvey Norman Stores (NZ) Pty Ltd"
+
+"trading as Harvey Norman"
+
+"STOCK from Store/Store" or "STOCK from Warehouse/Warehouse"
+
+A grid with columns like:
+
+Product Code | Items | QTY
+
+Product | Description | Qty | Price | Total
+
+This prevents false positives.
+
+🎯 Field Extraction Logic (More Precise)
+1. Origin Store (From)
+Extract the store name from exactly one of these patterns:
+
+Pattern A (most common)
+Code
+trading as Harvey Norman (.+)
+Pattern B (Bedding/Electrical)
+Code
+Harvey Norman (Bedding|Furniture|Electrical|AV/IT) (.+)
+Pattern C (Commercial)
+Code
+H\. N\. (.+)
+Stop extraction at the first comma or newline.
+
+2. Destination Store (To)
+Destination store ALWAYS appears below GST No. or under Shipping Address.
+
+Use this priority order:
+
+Pattern A (Shipping Address block)
+Code
+SHIPPING ADDRESS\n(.+)
+Pattern B (Destination block under GST No.)
+Code
+GST No\..*\n(.+)
+Pattern C (HN prefix)
+Code
+HN (Bedding|Furniture|Electrical|Commercial) (.+)
+3. Destination Address
+Extract all lines after destination store until:
+
+a blank line
+
+“Phone:”
+
+“Delivery Instructions”
+
+“Invoice Notes”
+
+This avoids capturing extra text.
+
+4. Purchase Order (Order #)
+Sales Orders ALWAYS show PO in one of these formats:
+
+Pattern A
+Code
+Purchase Order[: ]+([A-Z0-9]+)
+Pattern B (NZ format)
+Code
+NZ\d{10,}
+Pattern C (F2F)
+Code
+PO Number[: ]+([0-9]+)
+Final rule:  
+👉 Extract only the last 6 digits.
+
+5. Invoice Number
+Invoice numbers appear as:
+
+INVOICE 21/5225601
+
+INVOICE REPRINT 22/3833887
+
+Use:
+
+Code
+INVOICE(?: REPRINT)?\s+\d+\/(\d+)
+Extract last 6 digits.
+<truncated 581 bytes>
+ument is type 3 if it contains ANY TWO of:
+
+"BT Source"
+
+"Goods Movement"
+
+"FR:"
+
+"DP:"
+
+"DM:"
+
+"GR:"
+
+"PO:" (without “Purchase Order”)
+
+"Harvey Norman" but no “SALES ORDER”
+
+"Delv Qty"
+
+"X5" or "X<number>"
+
+This prevents misclassification.
+
+🎯 Field Extraction Logic (More Precise)
+1. Origin Store (From)
+Origin store appears in one of these:
+
+Pattern A (BT Source)
+Code
+BT Source.*?Harvey Norman (.+)
+Pattern B (FR block)
+Code
+FR:\s*\d+\s*\n.*?Harvey Norman (.+)
+Pattern C (Header)
+Code
+Harvey Norman (Furniture|Bedding|Electrical|Commercial) (.+)
+Stop at:
+
+newline
+
+number
+
+address
+
+2. Destination Store (To)
+Destination store appears under:
+
+"HN Furniture"
+
+"HN Bedding"
+
+"HN Electrical"
+
+"Shipping Address"
+
+Use:
+
+Code
+HN (Furniture|Bedding|Electrical|Commercial) (.+)
+Stop at newline.
+
+3. Order Number
+BT documents use:
+
+"PO:"
+
+"PO"
+
+"PO Number"
+
+"P/O"
+
+Use:
+
+Code
+PO[: ]+([0-9]+)
+P/O[: ]+([0-9]+)
+4. Invoice Number
+If present:
+
+Code
+Supplier Invoice[: ]+([0-9]+)
+Invoice[: ]+([0-9]+)
+5. Product Details
+Products appear:
+
+above “Accepted”
+
+next to “Delv Qty”
+
+next to “X5”
+
+under “Product”
+
+Use:
+
+Code
+([A-Z0-9].+)\n.*?(X\d+|Delv Qty|ORD)
+6. Quantity
+Extract from:
+
+Code
+X(\d+)
+Delv Qty[: ]+(\d+)
+ORD[: ]+(\d+)
+Use the first non‑null match.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-11T03:08:15+12:00.
+
+The user's current state is as follows:
+Active Document: c:\Users\dines\.gemini\config\mcp_config.json (LANGUAGE_JSON)
+Cursor is on line: 1
+Other open documents:
+- c:\Users\dines\OneDrive\Documents\DAV TRANSPORT\backend\scratch_test_export.js (LANGUAGE_JAVASCRIPT)
+- c:\Users\dines\OneDrive\Documents\DAV TRANSPORT\frontend\src\App.js (LANGUAGE_JAVASCRIPT)
+- c:\Users\dines\OneDrive\Documents\DAV TRANSPORT\backend\fix_210900.js (LANGUAGE_JAVASCRIPT)
+- c:\Users\dines\OneDrive\Documents\DAV TRANSPORT\backend\scratch_inspect_specific.js (LANGUAGE_JAVASCRIPT)
+- c:\Users\dines\OneDrive\Documents\DAV TRANSPORT\backend\scratch_cleanup.js (LANGUAGE_JAVASCRIPT)
+</ADDITIONAL_METADATA>

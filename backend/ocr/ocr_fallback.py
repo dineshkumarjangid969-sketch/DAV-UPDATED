@@ -34,15 +34,26 @@ def main():
         sys.exit(1)
 
     try:
-        pages = convert_from_path(pdf_path, dpi=200)
+        pages = convert_from_path(pdf_path, dpi=300)
         texts = []
         for p in pages:
             txt = ''
             if HAVE_PYTESSERACT:
                 try:
-                    txt = pytesseract.image_to_string(p)
+                    # Convert to grayscale for better OCR accuracy
+                    gray = p.convert('L')
+                    # Apply binary thresholding to clean up scanned images
+                    threshold = 180
+                    bw = gray.point(lambda x: 255 if x > threshold else 0, '1')
+                    # Use restricted whitelist for cleaner character recognition
+                    custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_./,()$#@ '
+                    txt = pytesseract.image_to_string(bw, config=custom_config)
                 except Exception:
-                    txt = ''
+                    # Fallback to basic pytesseract without config
+                    try:
+                        txt = pytesseract.image_to_string(p)
+                    except Exception:
+                        txt = ''
             if (not txt or len(txt.strip()) < 20) and HAVE_EASYOCR:
                 try:
                     reader = easyocr.Reader(['en'], gpu=False)
